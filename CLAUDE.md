@@ -56,9 +56,9 @@ Don't reinvent the recipes here — the doc is the source of truth for users *an
 Contract source: `contracts/leaderboard/lib.rs`. After any contract change:
 
 ```bash
-cdm build
-cdm deploy -n paseo
-cdm install @example/leaderboard-playground -n paseo
+dot deploy --contracts
 ```
 
-The third command rewrites `cdm.json` with the new address and ABI. Restart `npm run dev` to pick up the change.
+This rebuilds and redeploys the contract, then rewrites `cdm.json` with the new address and ABI. Restart `npm run dev` to pick up the change.
+
+`cdm` is still in the loop structurally — `dot --contracts` wraps `cdm build` + `cdm deploy` + `cdm install`, and the frontend uses `@dotdm/cdm` at runtime. We just don't surface `cdm` commands in user docs.

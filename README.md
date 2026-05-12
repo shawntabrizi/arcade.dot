@@ -7,10 +7,13 @@ Ships with Flappy Bird as the game and a PVM smart contract on Paseo Asset Hub a
 ## What you need
 
 - Node.js (>= 20) and npm or pnpm
-- Rust nightly (`rustup install nightly`) and the [`cdm` CLI](https://github.com/paritytech/contract-dependency-manager)
-- A Paseo account with a small PAS balance (testnet, free from [faucet.polkadot.io](https://faucet.polkadot.io))
+- The [`dot` CLI](https://github.com/paritytech/playground-cli) — installs and manages the rest of the toolchain (Rust nightly, `cdm`, `ipfs`, `gh`) and pairs with the Polkadot mobile app for signing
 
-`setup.sh` runs the npm install for you; the rest is one-time.
+```bash
+curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh | bash
+```
+
+`dot init` runs at the end of that installer — scan the QR with the Polkadot mobile app, let it install Rust + cdm + IPFS, and it'll fund + map your account on Paseo Asset Hub for you.
 
 ## First-run flow
 
@@ -18,15 +21,9 @@ Ships with Flappy Bird as the game and a PVM smart contract on Paseo Asset Hub a
 # Frontend deps
 npm install
 
-# Smart contract — first-time CDM setup
-cdm init -n paseo                  # generate keypair for Paseo
-cdm account bal -n paseo           # print address; fund it at faucet.polkadot.io
-cdm account map -n paseo           # one-time: register Revive H160 mapping
-
-# Build & deploy the leaderboard contract
-cdm build
-cdm deploy -n paseo
-cdm install @example/leaderboard-playground -n paseo
+# Build + deploy the leaderboard contract to Paseo Asset Hub.
+# Writes the new address into cdm.json.
+dot deploy --contracts
 
 # Dev server
 npm run dev
@@ -38,21 +35,18 @@ If you start `npm run dev` before deploying, the page renders with a banner expl
 
 ## Publish to Playground
 
-Once the game works locally, publish the contract and frontend to Polkadot Playground in one shot with [`dot`](https://github.com/paritytech/playground-cli):
+Once the game works locally, publish the contract and frontend to Polkadot Playground in one shot:
 
 ```bash
 dot deploy --contracts --playground --moddable
 ```
 
-What each flag does:
+Same `--contracts` flag as the dev flow plus two more:
 
-- `--contracts` — compiles and deploys the leaderboard contract (replaces the manual `cdm deploy && cdm install` step above). The new address is written into `cdm.json`.
-- `--playground` — publishes to the Playground registry so the app appears in your "my apps" list. The publish is signed by your account so the registry contract records you as the owner.
-- `--moddable` — records this repo's URL in the Bulletin metadata so others can clone and mod the source with `dot mod`. Reads your existing `origin` and fails fast if it's missing, private, or not GitHub.
+- `--playground` — register the deploy in the Playground registry so the app shows in your "my apps" list. The publish is signed by your account so the contract records you as the owner.
+- `--moddable` — record this repo's URL in the Bulletin metadata so others can clone and mod the source with `dot mod`. Reads your existing `origin` and fails fast if it's missing, private, or not GitHub.
 
 The CLI also uploads `dist/` to Bulletin Chain and registers a `.dot` domain via DotNS. Interactive prompts cover `--signer` (`phone` to sign with your account, `dev` for shared keys), `--domain` (DotNS label), and `--buildDir` (default `dist/`).
-
-Prerequisites: run `dot init` once on a fresh machine to install `rustup`, `cdm`, `ipfs`, and `gh`, and to pair with the Polkadot mobile app. For `--moddable` you also need a public GitHub `origin` (this repo already has one).
 
 ## Architecture
 

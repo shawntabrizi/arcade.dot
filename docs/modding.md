@@ -181,12 +181,10 @@ Use the contract for the hot index (player → best score) and Bulletin for the 
 The contract lives in `contracts/leaderboard/lib.rs`. After changes:
 
 ```bash
-cdm build
-cdm deploy -n paseo
-cdm install @example/leaderboard-playground -n paseo
+dot deploy --contracts
 ```
 
-The third command rewrites `cdm.json` with the new address and ABI. The frontend re-reads it on next dev server restart.
+This rebuilds and redeploys the contract, then rewrites `cdm.json` with the new address and ABI. The frontend re-reads it on next dev server restart.
 
 ### Common contract changes
 

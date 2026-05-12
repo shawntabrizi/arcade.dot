@@ -1,5 +1,7 @@
 node_modules
 dist
+target
+*.car
 .DS_Store
 *.log
 .env

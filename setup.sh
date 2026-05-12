@@ -21,12 +21,9 @@ if [ -f "package.json" ]; then
 fi
 
 echo
-echo "[setup] Checking optional contract toolchain..."
-if ! command -v cargo >/dev/null 2>&1; then
-    echo "[setup] WARNING: cargo not found. Install via https://rustup.rs to build the contract."
-fi
-if ! command -v cdm >/dev/null 2>&1; then
-    echo "[setup] WARNING: cdm CLI not found. Install it before deploying — see README.md."
+if ! command -v dot >/dev/null 2>&1; then
+    echo "[setup] WARNING: dot CLI not found. Install it before deploying:"
+    echo "  curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh | bash"
 fi
 
 cat <<'EOF'
@@ -34,12 +31,11 @@ cat <<'EOF'
 [setup] Done.
 
 To run with the on-chain leaderboard (the default):
-  cdm init -n paseo                  # generate keypair (one-time)
-  # fund the printed address at https://faucet.polkadot.io
-  cdm account map -n paseo           # one-time Revive H160 mapping
-  cdm build && cdm deploy -n paseo
-  cdm install @example/leaderboard-playground -n paseo
-  npm run dev
+  dot deploy --contracts             # build + deploy the leaderboard contract
+  npm run dev                        # start the dev server
+
+To publish to Polkadot Playground:
+  dot deploy --contracts --playground --moddable
 
 To run without deploying (localStorage fallback):
   See docs/modding.md → "Swap the backend → drop back to localStorage".

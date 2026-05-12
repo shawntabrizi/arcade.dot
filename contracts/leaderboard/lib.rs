@@ -1,8 +1,6 @@
 #![no_main]
 #![no_std]
 
-extern crate alloc;
-
 use alloc::string::String;
 use pvm::storage::Mapping;
 use pvm_contract as pvm;
