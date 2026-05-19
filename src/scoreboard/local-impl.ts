@@ -1,4 +1,5 @@
 import type { ScoreboardAPI, ScoreEntry } from "./api";
+import { getBurnerH160 } from "./signer";
 
 const STORAGE_KEY = "leaderboard-playground:scores";
 const MAX_ENTRIES = 100;
@@ -19,9 +20,9 @@ function write(entries: ScoreEntry[]): void {
 }
 
 export const localScoreboard: ScoreboardAPI = {
-  async submitScore(player, score) {
+  async submitScore(score) {
     const entries = read();
-    entries.push({ player, score, timestamp: Date.now() });
+    entries.push({ player: getBurnerH160(), score, timestamp: Date.now() });
     entries.sort((a, b) => b.score - a.score);
     write(entries.slice(0, MAX_ENTRIES));
   },

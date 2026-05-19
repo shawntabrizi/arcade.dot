@@ -71,19 +71,29 @@ The CLI also uploads `dist/` to Bulletin Chain and registers a `.dot` domain via
                   └─────────────────────────────────────┘
 
 contracts/leaderboard/lib.rs
-  PVM smart contract — append-only enumeration + per-name personal best.
+  PVM smart contract — keyed by caller (H160), stores each player's personal best.
 ```
 
 The seam is `GameComponentProps` (in [`src/games/types.ts`](src/games/types.ts)) on one side and `ScoreboardAPI` (in [`src/scoreboard/api.ts`](src/scoreboard/api.ts)) on the other. Anything implementing one of those is a drop-in.
 
 ## Identity model (read this)
 
-This template uses a **shared dev signer** (`//Alice`) for every transaction, with the **display name** as the leaderboard identity. The contract stores best score per name, not per caller:
+The contract is keyed by `caller()` — the H160 the runtime maps the substrate signer to. Each browser holds its own **burner wallet** (sr25519 mnemonic in `localStorage`, see [`src/scoreboard/signer.ts`](src/scoreboard/signer.ts)). That burner is what signs `submit_score`, so each browser shows up as a distinct H160 on the leaderboard.
 
-- **Pro:** zero auth UX, runs out of the box, multiple players differentiated by name.
-- **Con:** anyone can submit any name. No anti-spoofing. Fine for a starter / hackathon demo, not for production.
+A fresh burner has no balance and isn't registered with `pallet_revive`, so on first submit [`src/scoreboard/bootstrap.ts`](src/scoreboard/bootstrap.ts) runs a one-time setup using a **faucet account**:
 
-Replacing `//Alice` with a real signer (extension, Polkadot Mobile, session key) is a documented mod — see [`docs/modding.md`](docs/modding.md). Adding caller-based identity to the contract is a documented quest in [`quests.json`](quests.json).
+1. The faucet calls `Balances.transfer_keep_alive` to fund the burner.
+2. The burner calls `Revive.map_account()` to register itself as a contract caller.
+3. The burner signs `submit_score(score)`.
+
+Three finalized extrinsics — expect ~30s on the first submit, then one tx per submit after.
+
+The faucet defaults to `//Alice`, which works on a local revive dev node. On the public Paseo Asset Hub testnet, `//Alice` is drained — copy [`.env.example`](.env.example) to `.env.local` and set `VITE_FAUCET_SURI` to a funded account. The well-known `//Bob` dev key still works there today; for sustained use, paste your `~/.cdm/accounts.json` mnemonic (the same account `dot init` funded for you).
+
+Trade-offs:
+
+- **Pro:** zero player-side auth UX. No extension, no manual faucet, distinct identity per browser.
+- **Con:** the faucet pays ~1 PAS per new player. Every browser session creates a new burner unless `localStorage` carries one over. Suitable for starter / demo / hackathon use; for production replace the burner with an extension signer (see [`docs/modding.md`](docs/modding.md)).
 
 ## Swap the game
 
@@ -133,9 +143,9 @@ Convention files for the playground registry: [`template.json`](template.json), 
 See [`quests.json`](quests.json) for the full list. Highlights:
 
 - **Swap the game** — anything producing a numeric score plugs in.
-- **Caller-based identity** — change the contract to use `caller()` (the Revive H160 of the signer) instead of a display-name string. Requires a real signer.
+- **Swap the burner for an extension signer** — replace `src/scoreboard/signer.ts` with the Polkadot extension or mobile app, so players hold their own keys instead of a browser burner.
 - **Bulletin replay history** — store full match history off-chain, content-addressed; contract holds the index.
-- **Cross-game scoring** — add `game_id` to the contract; multiple games share one leaderboard.
+- **Cross-game scoring** — a singleton Arcade contract aggregates scores across every game built from this template (in progress).
 
 ## Why this shape
 

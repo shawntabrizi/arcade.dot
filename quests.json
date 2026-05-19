@@ -22,29 +22,11 @@
       ]
     },
     {
-      "id": "caller-based-identity",
-      "title": "Bind scores to accounts",
-      "difficulty": 3,
-      "estimated_minutes": 60,
-      "summary": "Replace the display-name identity with caller() (the H160 of the transaction signer). The contract maps Address → best score, and the leaderboard renders the address with a user-chosen display name stored separately. Score spoofing becomes impossible.",
-      "teaches": [
-        "Revive H160 caller() and Address mapping",
-        "Per-account vs per-name storage trade-offs",
-        "Decoupling identity from display"
-      ],
-      "required_tools": ["cdm", "rustup"],
-      "acceptance": [
-        "Contract storage uses Address as the key for best score",
-        "Submissions can only update the caller's own score",
-        "Leaderboard renders both display name and short address"
-      ]
-    },
-    {
-      "id": "real-signer",
-      "title": "Replace //Alice with a real signer",
+      "id": "extension-signer",
+      "title": "Swap the burner for an extension signer",
       "difficulty": 2,
       "estimated_minutes": 45,
-      "summary": "By default every submission is signed by the //Alice dev key. Wire up a real signer — the Polkadot extension via @polkadot-apps/signer, the playground.dot mobile session key, or a per-browser keypair stored in localStorage.",
+      "summary": "By default each browser holds its own burner sr25519 keypair, and a faucet funds it on first submit. Replace src/scoreboard/signer.ts with the Polkadot extension or mobile app so players hold their own keys — identity becomes portable across devices and the faucet stops being a bottleneck.",
       "teaches": [
         "@polkadot-apps/signer SignerManager",
         "Account selection / connection UX",
@@ -53,7 +35,8 @@
       "acceptance": [
         "User connects an account before submitting",
         "Submissions are signed by the connected account",
-        "App.tsx surfaces the connected address in the UI"
+        "App.tsx surfaces the connected address in the UI",
+        "The faucet/bootstrap path is either removed or only kicks in for first-time players"
       ]
     },
     {

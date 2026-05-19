@@ -6,3 +6,5 @@ target
 *.log
 .env
 .env.local
+.cdm/
+tsconfig.tsbuildinfo

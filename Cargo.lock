@@ -19,6 +19,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "arcade"
+version = "0.1.0"
+dependencies = [
+ "cdm",
+ "parity-scale-codec",
+ "picoalloc",
+ "polkavm-derive 0.31.0",
+ "pvm_contract",
+]
+
+[[package]]
 name = "arrayvec"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"

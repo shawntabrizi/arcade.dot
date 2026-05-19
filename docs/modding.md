@@ -12,7 +12,7 @@ Three folders, three responsibilities:
 
 The smart contract sits behind the scoreboard layer:
 
-- **`contracts/leaderboard/lib.rs`** — A PVM contract on Paseo Asset Hub. Stores `best[name] = score` and an enumerable index of names. The `contractScoreboard` in TypeScript talks to it via `@dotdm/cdm`.
+- **`contracts/leaderboard/lib.rs`** — A PVM contract on Paseo Asset Hub. Stores `best[caller_h160] = score` and an enumerable index of player addresses. The `contractScoreboard` in TypeScript talks to it via `@dotdm/cdm`.
 
 That's the whole architecture. Two interfaces (`GameComponentProps`, `ScoreboardAPI`) define the seams; everything else is implementation behind one of them.
 
@@ -101,7 +101,7 @@ Anything that ends with a single number is a fit.
 
 ## Swap the backend
 
-The shipped default is `contractScoreboard` — scores written to a PVM contract on Paseo Asset Hub, signed by `//Alice`. Two interesting alternatives:
+The shipped default is `contractScoreboard` — scores written to a PVM contract on Paseo Asset Hub, signed by a per-browser **burner wallet** (sr25519 keypair persisted in `localStorage`). On a player's first submit, a configurable **faucet account** funds the burner and the burner registers itself with `pallet_revive`. Two interesting alternatives:
 
 - **`localScoreboard`** — already in the repo. Drops back to `localStorage`. Useful for offline dev, demos, and showing the architecture without deploying.
 - **A custom backend** — anything implementing `ScoreboardAPI`. Examples below.
@@ -112,11 +112,13 @@ A backend is anything that satisfies `ScoreboardAPI` (defined in `src/scoreboard
 
 ```ts
 export interface ScoreboardAPI {
-  submitScore(player: string, score: number): Promise<void>;
+  submitScore(score: number): Promise<void>;
   getTopScores(limit?: number): Promise<ScoreEntry[]>;
-  getPlayerBest(player: string): Promise<number | null>;
+  getPlayerBest(player: `0x${string}`): Promise<number | null>;
 }
 ```
+
+`submitScore` no longer takes a player argument — the identity comes from the signer that the backend has configured. `getPlayerBest` takes the player's H160 (e.g. the burner's, available via `getBurnerH160()` in `signer.ts`).
 
 The `Leaderboard` component, the player input, and the game all stay exactly the same. The only file that knows which backend is in use is `src/App.tsx`.
 
@@ -135,30 +137,28 @@ For offline dev, presentations, or testing UI changes without funding accounts:
 
 The game and `Leaderboard` keep working unchanged.
 
-### Recipe — replace `//Alice` with a real signer
+### Recipe — replace the burner with a real signer
 
-By default, every score submission is signed by `//Alice`. That's fine for demos but obviously wrong for production. To swap in real authentication:
+By default, each browser holds its own burner sr25519 keypair (`src/scoreboard/signer.ts`), and the faucet (configured via `VITE_FAUCET_SURI`) funds it on first submit. That's fine for demos but two things break it in production: the faucet exhausts as players grow, and each new browser is a brand-new identity (no portability across devices). To swap in real keys:
 
 1. Pick a signer source. Common options:
    - **Polkadot extension / mobile app** via `@polkadot-apps/signer`'s `SignerManager`
-   - **A user-supplied secret URI** typed into the UI on first run (per-browser identity)
+   - **WalletConnect** for a session-based flow
    - **Session keys** from the playground.dot Polkadot mobile app sign-in flow
 
-2. Edit `src/scoreboard/contract-impl.ts`. Replace `getDevSigner()` with a function that returns the user's `PolkadotSigner`:
+2. Edit `src/scoreboard/signer.ts`. Replace the burner-generation logic with a function that resolves to the user's `PolkadotSigner` and their ss58 address:
 
    ```ts
    import { signerManager } from "./your-signer-setup";
 
-   function getActiveSigner() {
+   function ensureBurner() {
      const account = signerManager.getState().selectedAccount;
      if (!account) throw new Error("Not connected — please sign in first.");
-     return account.getSigner();
+     return { signer: account.getSigner(), ss58: account.address, h160: ss58ToEthereum(account.address).asHex() };
    }
    ```
 
-   Pass it to `createCdm` via `defaultSigner`.
-
-3. Optionally, switch the contract to use `caller()` as the identity (instead of the display-name string) — see the "Caller-based identity" quest in `quests.json`.
+3. Decide what to do with the bootstrap. With a real signer the user controls their own balance and mapping — you can either drop `src/scoreboard/bootstrap.ts` entirely and surface a "you need PAS + a one-time `Revive.map_account` call" prompt, or keep it and let the faucet still subsidize first-time players.
 
 ### Recipe — Bulletin-backed match history
 
@@ -188,9 +188,9 @@ This rebuilds and redeploys the contract, then rewrites `cdm.json` with the new 
 
 ### Common contract changes
 
-- **Add a `caller()` field** to `Entry` so the leaderboard shows who submitted each score (in addition to the display name).
 - **Add anti-spam:** rate-limit per caller (e.g. one submission per N blocks), or require a small fee.
-- **Add a `game_id`** so multiple games share the same contract — the API change to `ScoreboardAPI.submitScore` is straightforward, and `Leaderboard.tsx` only needs to know how to filter by game.
+- **Register with a singleton `Arcade` contract** so this game shows up in a global leaderboard alongside every other game built from this template (in progress — see the Arcade plan).
+- **Optional display name on-chain.** Today addresses render as truncated hex; a per-caller `name: String` mapping (or delegation to the Arcade) gives them human-readable labels.
 
 ---
 

@@ -1,16 +1,361 @@
 {
   "targets": {
     "acc2c3b5e912b762": {
-      "asset-hub": "wss://asset-hub-paseo-rpc.n.dwellir.com",
+      "asset-hub": "wss://sys.ibp.network/asset-hub-paseo",
       "bulletin": "https://paseo-ipfs.polkadot.io/ipfs"
     }
   },
   "dependencies": {
     "acc2c3b5e912b762": {
-      "@example/leaderboard-playground": "latest"
+      "@example/leaderboard-playground": "latest",
+      "@example/arcade-playground": "latest"
     }
   },
   "contracts": {
-    "acc2c3b5e912b762": {}
+    "acc2c3b5e912b762": {
+      "@example/leaderboard-playground": {
+        "version": 2,
+        "address": "0xB0fe807822C900372bFaAC1710253BA8E98E0F8E",
+        "abi": [
+          {
+            "type": "constructor",
+            "inputs": [],
+            "stateMutability": "nonpayable"
+          },
+          {
+            "type": "function",
+            "name": "submitScore",
+            "inputs": [
+              {
+                "name": "score",
+                "type": "uint128"
+              }
+            ],
+            "outputs": [],
+            "stateMutability": "nonpayable"
+          },
+          {
+            "type": "function",
+            "name": "getBest",
+            "inputs": [
+              {
+                "name": "player",
+                "type": "address"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint128"
+              }
+            ],
+            "stateMutability": "view"
+          },
+          {
+            "type": "function",
+            "name": "getPlayerCount",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint32"
+              }
+            ],
+            "stateMutability": "view"
+          },
+          {
+            "type": "function",
+            "name": "getEntryAt",
+            "inputs": [
+              {
+                "name": "index",
+                "type": "uint32"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "",
+                "type": "tuple",
+                "components": [
+                  {
+                    "name": "player",
+                    "type": "address"
+                  },
+                  {
+                    "name": "score",
+                    "type": "uint128"
+                  }
+                ]
+              }
+            ],
+            "stateMutability": "view"
+          }
+        ],
+        "metadataCid": "bafk2bzaceaygsedjgcshralcekl7aaeryywmdqa6ulcizhzzawcy4cv2urfas"
+      },
+      "@example/arcade-playground": {
+        "version": 1,
+        "address": "0xF63B2388CAF8a449214A70d364eBe98Cb083877f",
+        "abi": [
+          {
+            "type": "constructor",
+            "inputs": [],
+            "stateMutability": "nonpayable"
+          },
+          {
+            "type": "function",
+            "name": "registerGame",
+            "inputs": [
+              {
+                "name": "contract",
+                "type": "address"
+              },
+              {
+                "name": "name",
+                "type": "string"
+              },
+              {
+                "name": "image_uri",
+                "type": "string"
+              }
+            ],
+            "outputs": [],
+            "stateMutability": "nonpayable"
+          },
+          {
+            "type": "function",
+            "name": "setDisplayName",
+            "inputs": [
+              {
+                "name": "name",
+                "type": "string"
+              }
+            ],
+            "outputs": [],
+            "stateMutability": "nonpayable"
+          },
+          {
+            "type": "function",
+            "name": "recordScore",
+            "inputs": [
+              {
+                "name": "game",
+                "type": "address"
+              }
+            ],
+            "outputs": [],
+            "stateMutability": "nonpayable"
+          },
+          {
+            "type": "function",
+            "name": "getGameCount",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint32"
+              }
+            ],
+            "stateMutability": "view"
+          },
+          {
+            "type": "function",
+            "name": "getGameAt",
+            "inputs": [
+              {
+                "name": "index",
+                "type": "uint32"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "",
+                "type": "address"
+              }
+            ],
+            "stateMutability": "view"
+          },
+          {
+            "type": "function",
+            "name": "getGameInfo",
+            "inputs": [
+              {
+                "name": "game",
+                "type": "address"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "",
+                "type": "tuple",
+                "components": [
+                  {
+                    "name": "name",
+                    "type": "string"
+                  },
+                  {
+                    "name": "image_uri",
+                    "type": "string"
+                  },
+                  {
+                    "name": "registered_at",
+                    "type": "uint64"
+                  },
+                  {
+                    "name": "last_activity",
+                    "type": "uint64"
+                  }
+                ]
+              }
+            ],
+            "stateMutability": "view"
+          },
+          {
+            "type": "function",
+            "name": "getDisplayName",
+            "inputs": [
+              {
+                "name": "player",
+                "type": "address"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "",
+                "type": "string"
+              }
+            ],
+            "stateMutability": "view"
+          },
+          {
+            "type": "function",
+            "name": "getTotalPoints",
+            "inputs": [
+              {
+                "name": "player",
+                "type": "address"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint128"
+              }
+            ],
+            "stateMutability": "view"
+          },
+          {
+            "type": "function",
+            "name": "getPerGameBest",
+            "inputs": [
+              {
+                "name": "game",
+                "type": "address"
+              },
+              {
+                "name": "player",
+                "type": "address"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint128"
+              }
+            ],
+            "stateMutability": "view"
+          },
+          {
+            "type": "function",
+            "name": "getPlayerCount",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint32"
+              }
+            ],
+            "stateMutability": "view"
+          },
+          {
+            "type": "function",
+            "name": "getPlayerAt",
+            "inputs": [
+              {
+                "name": "index",
+                "type": "uint32"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "",
+                "type": "address"
+              }
+            ],
+            "stateMutability": "view"
+          },
+          {
+            "type": "function",
+            "name": "getRecentTotal",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint32"
+              }
+            ],
+            "stateMutability": "view"
+          },
+          {
+            "type": "function",
+            "name": "getRecentAt",
+            "inputs": [
+              {
+                "name": "slot",
+                "type": "uint32"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "",
+                "type": "tuple",
+                "components": [
+                  {
+                    "name": "game",
+                    "type": "address"
+                  },
+                  {
+                    "name": "player",
+                    "type": "address"
+                  },
+                  {
+                    "name": "score",
+                    "type": "uint128"
+                  },
+                  {
+                    "name": "timestamp",
+                    "type": "uint64"
+                  }
+                ]
+              }
+            ],
+            "stateMutability": "view"
+          },
+          {
+            "type": "function",
+            "name": "getRingSize",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint32"
+              }
+            ],
+            "stateMutability": "view"
+          }
+        ],
+        "metadataCid": "bafk2bzacecmeld43srhqa6mohyuxgcfxwfqovmsb6sako4oq3aylivadqhmr4"
+      }
+    }
   }
 }

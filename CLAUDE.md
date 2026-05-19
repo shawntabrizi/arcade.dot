@@ -18,13 +18,21 @@ The two interfaces — `GameComponentProps` and `ScoreboardAPI` — are the seam
 
 ## Identity model
 
-Every transaction is signed by `//Alice` (a hardcoded dev signer). The contract uses the **display name** as the identity, not `caller()`. This is a deliberate starter trade-off:
+The contract is keyed by `pvm::caller()` — the H160 the runtime maps the substrate signer to. Each browser holds its own **burner wallet** (sr25519 mnemonic in localStorage, see `src/scoreboard/signer.ts`), which is what signs `submit_score`. So each browser shows up as a distinct H160 on the leaderboard.
 
-- Zero auth UX → runs out of the box.
-- Multiple players are differentiated by display name.
-- Anyone can submit any name (no anti-spoofing).
+A fresh burner has no balance and isn't registered with `pallet_revive`, so on first submit `src/scoreboard/bootstrap.ts` runs a one-time setup using `//Alice` as a faucet:
 
-Replacing `//Alice` with a real signer is a documented mod. Adding caller-based identity is a documented quest. Don't change either silently — both are user-facing trade-offs.
+1. `//Alice` calls `Balances.transfer_keep_alive` to fund the burner.
+2. The burner calls `Revive.map_account()` to register itself as a caller.
+3. The burner can now sign `submit_score(score)` on its own.
+
+Trade-offs in this setup:
+
+- Zero player-side auth UX (no extension, no manual faucet) — runs out of the box.
+- `//Alice` is still in the codebase, but only as the shared faucet. Real submissions are signed by the player's own burner.
+- A future PR adds a singleton "Arcade" registry contract that aggregates scores across games — see `docs/modding.md`.
+
+Don't reintroduce display-name identity, `//Alice` as the submission signer, or anonymous spoofable IDs without surfacing the trade-off.
 
 ## When the user wants to swap something
 
