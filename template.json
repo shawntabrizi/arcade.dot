@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "kind": "dashboard",
+  "track_id": "arcade-dashboard",
+  "name": "Arcade Dashboard",
+  "description": "Read-only dashboard for the Polkadot Arcade — cross-game leaderboard across every game built from the Leaderboard Playground template.",
+  "repository": "https://github.com/shawntabrizi/arcade-dashboard"
+}
