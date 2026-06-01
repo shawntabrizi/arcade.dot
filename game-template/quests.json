@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "track_id": "leaderboard-playground",
+  "title": "Leaderboard Playground",
+  "description": "Mod ideas to extend this template. Each one demonstrates a different layer of the Polkadot stack and reuses the existing game / scoreboard / contract separation.",
+  "quests": [
+    {
+      "id": "swap-the-game",
+      "title": "Swap the game",
+      "difficulty": 1,
+      "estimated_minutes": 30,
+      "summary": "Replace Flappy Bird with your own game. Build a component that accepts GameComponentProps and calls onGameEnd(score) once when the game ends. The scoreboard, contract, leaderboard UI, and player input all keep working without changes — App.tsx is the only file you need to edit.",
+      "teaches": [
+        "React component contracts",
+        "Designing for plug-in extensibility",
+        "Separating game logic from persistence"
+      ],
+      "acceptance": [
+        "A new game component lives under src/games/<your-game>/",
+        "It implements GameComponentProps from src/games/types.ts",
+        "Swapping it in App.tsx is a one-line change"
+      ]
+    },
+    {
+      "id": "extension-signer",
+      "title": "Swap the burner for an extension signer",
+      "difficulty": 2,
+      "estimated_minutes": 45,
+      "summary": "By default each browser holds its own burner sr25519 keypair, and a faucet funds it on first submit. Replace src/scoreboard/signer.ts with the Polkadot extension or mobile app so players hold their own keys — identity becomes portable across devices and the faucet stops being a bottleneck.",
+      "teaches": [
+        "@polkadot-apps/signer SignerManager",
+        "Account selection / connection UX",
+        "PolkadotSigner shape used by polkadot-api"
+      ],
+      "acceptance": [
+        "User connects an account before submitting",
+        "Submissions are signed by the connected account",
+        "App.tsx surfaces the connected address in the UI",
+        "The faucet/bootstrap path is either removed or only kicks in for first-time players"
+      ]
+    },
+    {
+      "id": "bulletin-history",
+      "title": "Persist match history on Bulletin",
+      "difficulty": 2,
+      "estimated_minutes": 45,
+      "summary": "Each match's full history (rounds, timestamps, replay data) gets uploaded to Bulletin Chain on game end. The contract stores only (player, score, latest_cid) — heavy data lives off-chain, content-addressed.",
+      "teaches": [
+        "@polkadot-apps/bulletin upload flow",
+        "CID-based content addressing",
+        "Splitting hot index from cold replay data"
+      ],
+      "required_tools": ["dot-cli"],
+      "acceptance": [
+        "Each submitted score is paired with a Bulletin CID",
+        "Clicking a leaderboard entry fetches and replays the match"
+      ]
+    },
+    {
+      "id": "cross-game-scores",
+      "title": "Cross-game scoring",
+      "difficulty": 2,
+      "estimated_minutes": 45,
+      "summary": "Add a game_id field to ScoreEntry, ScoreboardAPI, and the contract so multiple games can share one leaderboard. Players accumulate points across all games; per-game leaderboards are still available via filter.",
+      "teaches": [
+        "Composite keys in contract storage",
+        "API evolution without breaking existing games",
+        "UX patterns for cross-game ranking"
+      ],
+      "acceptance": [
+        "Two distinct games write to the same contract",
+        "A 'global' tab sums points across games per player",
+        "A 'per-game' tab filters by game_id"
+      ]
+    }
+  ]
+}

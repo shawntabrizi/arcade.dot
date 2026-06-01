@@ -1,0 +1,74 @@
+.flappy-wrap {
+  position: relative;
+  width: 360px;
+  height: 540px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  user-select: none;
+}
+
+.flappy-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.flappy-hud {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.flappy-score {
+  font-size: 36px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow:
+    -2px 0 0 #000,
+    2px 0 0 #000,
+    0 -2px 0 #000,
+    0 2px 0 #000;
+  letter-spacing: 0.04em;
+}
+
+.flappy-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.flappy-overlay p {
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.flappy-retry {
+  pointer-events: auto;
+  background: #fff;
+  color: #222;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 999px;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+
+.flappy-retry:hover {
+  transform: translateY(-1px);
+}
