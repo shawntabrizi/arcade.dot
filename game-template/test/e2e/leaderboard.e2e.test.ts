@@ -42,6 +42,12 @@ describe("leaderboard E2E (paseo-next-v2)", () => {
       // Leaderboard round-trip: the contract now reports our exact score.
       expect(await contractScoreboard.getPlayerBest(player)).toBe(SCORE);
 
+      // Recent-activity ring: every submission is recorded, newest first.
+      const recent = await contractScoreboard.getRecentScores(5);
+      expect(recent[0]?.player.toLowerCase()).toBe(player.toLowerCase());
+      expect(recent[0]?.score).toBe(SCORE);
+      expect(recent[0]?.timestamp).toBeGreaterThan(0);
+
       // Arcade aggregation only happens once the game is registered with the
       // Arcade (a one-time deployer step); record_score is otherwise a no-op.
       // Assert consistency without flaking on registration state.
@@ -50,8 +56,8 @@ describe("leaderboard E2E (paseo-next-v2)", () => {
         expect(total).toBe(BigInt(SCORE));
       } else {
         console.warn(
-          "[e2e] arcade total is 0 — leaderboard not registered with the Arcade; " +
-            "record_score no-opped (run arcade.registerGame to enable aggregation).",
+          "[e2e] arcade total is 0 — either the fire-and-forget record_score " +
+            "hasn't landed yet, or the game isn't registered with the Arcade.",
         );
       }
     },

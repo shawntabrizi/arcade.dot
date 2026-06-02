@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 description = "Arcade — singleton registry + cross-game leaderboard for every game built from this template."
 
+# CDM package identity — required by `dot contract deploy` (v0.27+) detection.
+[package.metadata.cdm]
+package = "@example/arcade-playground"
+
 [lib]
 path = "lib.rs"
 
