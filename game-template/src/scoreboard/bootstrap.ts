@@ -8,6 +8,7 @@ import {
 import { getPolkadotSigner } from "polkadot-api/signer";
 import type { PolkadotClient, PolkadotSigner } from "polkadot-api";
 import type { InkSdk } from "@polkadot-api/sdk-ink";
+import { submitInBlock } from "./tx";
 
 // Plancks transferred from the faucet to each fresh burner. Has to cover the
 // burner's Revive.map_account fee plus enough submit_score txs to be useful.
@@ -63,12 +64,17 @@ async function run(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const api = client.getUnsafeApi() as any;
 
-  await api.tx.Balances.transfer_keep_alive({
-    dest: { type: "Id", value: burner.ss58 },
-    value: FUND_PLANCKS,
-  }).signAndSubmit(faucetSigner());
+  // Resolve at best-block inclusion rather than finalization (see tx.ts).
+  // map_account depends on the funds landing first, so these stay sequential.
+  await submitInBlock(
+    api.tx.Balances.transfer_keep_alive({
+      dest: { type: "Id", value: burner.ss58 },
+      value: FUND_PLANCKS,
+    }),
+    faucetSigner(),
+  );
 
-  await api.tx.Revive.map_account().signAndSubmit(burner.signer);
+  await submitInBlock(api.tx.Revive.map_account(), burner.signer);
 
   localStorage.setItem(READY_KEY, burner.ss58);
 }

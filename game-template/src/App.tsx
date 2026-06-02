@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { FlappyGame } from "./games/flappy/FlappyGame";
+import type { ScoreEntry } from "./scoreboard/api";
 import { Leaderboard, shortAddress } from "./scoreboard/Leaderboard";
 import {
   contractScoreboard,
@@ -8,7 +9,7 @@ import {
   isLeaderboardContractDeployed,
 } from "./scoreboard/contract-impl";
 import { ensureBurnerReady } from "./scoreboard/bootstrap";
-import { getCdm } from "./scoreboard/cdm";
+import { getCdm, inkSdkBest } from "./scoreboard/cdm";
 import { getBurnerSigner } from "./scoreboard/signer";
 import {
   getDisplayName,
@@ -30,6 +31,9 @@ export function App() {
   const [lastScore, setLastScore] = useState<number | null>(null);
   const [submitState, setSubmitState] = useState<"idle" | "submitting" | "error">("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Optimistic: the player's just-played score, shown on the board immediately
+  // and reconciled when the real submit lands.
+  const [pendingEntry, setPendingEntry] = useState<ScoreEntry | null>(null);
   const [nameInput, setNameInput] = useState(() => localStorage.getItem(NAME_KEY) ?? "");
   const [savedName, setSavedName] = useState(() => localStorage.getItem(NAME_KEY) ?? "");
   const [nameState, setNameState] = useState<NameState>("idle");
@@ -52,6 +56,20 @@ export function App() {
     };
   }, [burnerH160, savedName]);
 
+  // Eagerly fund + map the burner in the background on load, so the two
+  // bootstrap txs are done (or in flight) by the time the player finishes a
+  // round — keeping them off the perceived submit path. Idempotent + cached.
+  useEffect(() => {
+    if (!CONTRACT_DEPLOYED) return;
+    const c = getCdm();
+    ensureBurnerReady(c.client, inkSdkBest(), {
+      signer: getBurnerSigner(),
+      ss58: burnerSs58,
+    }).catch(() => {
+      /* errors surface on the actual submit */
+    });
+  }, [burnerSs58]);
+
   const saveName = useCallback(async () => {
     const trimmed = nameInput.trim();
     if (!trimmed || trimmed === savedName) return;
@@ -64,7 +82,7 @@ export function App() {
     setNameError(null);
     try {
       const c = getCdm();
-      await ensureBurnerReady(c.client, c.inkSdk, {
+      await ensureBurnerReady(c.client, inkSdkBest(), {
         signer: getBurnerSigner(),
         ss58: burnerSs58,
       });
@@ -80,20 +98,27 @@ export function App() {
     }
   }, [nameInput, savedName, burnerSs58]);
 
-  const onGameEnd = useCallback(async (score: number) => {
-    setLastScore(score);
-    if (!CONTRACT_DEPLOYED) return;
-    setSubmitState("submitting");
-    setSubmitError(null);
-    try {
-      await SCOREBOARD.submitScore(score);
-      setRefreshKey((k) => k + 1);
-      setSubmitState("idle");
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : String(err));
-      setSubmitState("error");
-    }
-  }, []);
+  const onGameEnd = useCallback(
+    async (score: number) => {
+      setLastScore(score);
+      if (!CONTRACT_DEPLOYED) return;
+      setSubmitState("submitting");
+      setSubmitError(null);
+      // Optimistically place the score on the board right away; the real submit
+      // (and refresh) reconciles it a moment later.
+      setPendingEntry({ player: burnerH160, score, timestamp: Date.now() });
+      try {
+        await SCOREBOARD.submitScore(score);
+        setRefreshKey((k) => k + 1);
+        setSubmitState("idle");
+      } catch (err) {
+        setSubmitError(err instanceof Error ? err.message : String(err));
+        setSubmitState("error");
+        setPendingEntry(null); // roll back the optimistic entry on failure
+      }
+    },
+    [burnerH160],
+  );
 
   const nameStatus =
     nameState === "saving"
@@ -159,7 +184,12 @@ export function App() {
         </section>
 
         <section className="board-col">
-          <Leaderboard api={SCOREBOARD} refreshKey={refreshKey} highlightPlayer={burnerH160} />
+          <Leaderboard
+            api={SCOREBOARD}
+            refreshKey={refreshKey}
+            highlightPlayer={burnerH160}
+            pendingEntry={pendingEntry}
+          />
         </section>
       </div>
 

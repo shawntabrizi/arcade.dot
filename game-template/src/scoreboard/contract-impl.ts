@@ -1,5 +1,5 @@
 import type { ScoreboardAPI, ScoreEntry } from "./api";
-import { getCdm, isContractInstalled } from "./cdm";
+import { contractQuery, contractSendInBlock, getCdm, inkSdkBest, isContractInstalled } from "./cdm";
 import { ensureBurnerReady } from "./bootstrap";
 import { getBurnerH160, getBurnerSigner, getBurnerSs58 } from "./signer";
 import { getLeaderboardAddress, isArcadeInstalled, recordScore as arcadeRecordScore } from "./arcade";
@@ -10,34 +10,10 @@ function isContractDeployed(): boolean {
   return isContractInstalled(CONTRACT_NAME);
 }
 
-interface LeaderboardContract {
-  submitScore: { tx: (score: bigint) => Promise<unknown> };
-  getBest: {
-    query: (player: `0x${string}`) => Promise<{ success: boolean; value: bigint }>;
-  };
-  getPlayerCount: {
-    query: () => Promise<{ success: boolean; value: number }>;
-  };
-  getEntryAt: {
-    query: (
-      index: number,
-    ) => Promise<{
-      success: boolean;
-      value: { player: `0x${string}`; score: bigint };
-    }>;
-  };
-}
-
-function contract(): LeaderboardContract {
-  // The generated CDM type for this contract isn't available until after
-  // `cdm install` has written .cdm/cdm.d.ts, so we cast to a local interface.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (getCdm() as any).getContract(CONTRACT_NAME) as LeaderboardContract;
-}
-
 async function ensureReady(): Promise<void> {
-  const c = getCdm();
-  await ensureBurnerReady(c.client, c.inkSdk, {
+  // Best-block ink sdk so the fresh burner's just-included map_account is
+  // visible to the dry-run that immediately follows.
+  await ensureBurnerReady(getCdm().client, inkSdkBest(), {
     signer: getBurnerSigner(),
     ss58: getBurnerSs58(),
   });
@@ -51,31 +27,42 @@ export const contractScoreboard: ScoreboardAPI = {
       );
     }
     await ensureReady();
-    await contract().submitScore.tx(BigInt(score));
+    // Submit at best-block inclusion (see tx.ts) rather than via cdm's
+    // finalization-bound `.tx`. This is the one write the UI waits on.
+    await contractSendInBlock(
+      CONTRACT_NAME,
+      "submitScore",
+      { score: BigInt(score) },
+      getBurnerSs58(),
+      getBurnerSigner(),
+    );
     // Pull-style sync to the Arcade so totals + recent feed reflect this submit.
-    // Best-effort: if the Arcade isn't installed (forks that haven't run the
-    // arcade deploy), fall through silently — the per-game leaderboard still works.
+    // Fire-and-forget: the per-game leaderboard already reflects the score, so
+    // we don't make the player wait on a second tx. Best-effort — silently skip
+    // if the Arcade isn't installed (forks that haven't run the arcade deploy).
     const gameAddr = getLeaderboardAddress();
     if (isArcadeInstalled() && gameAddr) {
-      await arcadeRecordScore(gameAddr);
+      void arcadeRecordScore(gameAddr).catch((err) => {
+        console.warn("[arcade] record_score failed (non-fatal):", err);
+      });
     }
   },
 
   async getTopScores(limit = 10) {
     if (!isContractDeployed()) return [];
-    const c = contract();
-    const countRes = await c.getPlayerCount.query();
-    const count = countRes.success ? countRes.value : 0;
+    const origin = getBurnerSs58();
+    const count = (await contractQuery<number>(CONTRACT_NAME, "getPlayerCount", {}, origin)) ?? 0;
     if (count === 0) return [];
     const entries: ScoreEntry[] = [];
     for (let i = 0; i < count; i++) {
-      const r = await c.getEntryAt.query(i);
-      if (!r.success) continue;
-      entries.push({
-        player: r.value.player,
-        score: Number(r.value.score),
-        timestamp: 0,
-      });
+      const entry = await contractQuery<{ player: `0x${string}`; score: bigint }>(
+        CONTRACT_NAME,
+        "getEntryAt",
+        { index: i },
+        origin,
+      );
+      if (!entry) continue;
+      entries.push({ player: entry.player, score: Number(entry.score), timestamp: 0 });
     }
     entries.sort((a, b) => b.score - a.score);
     return entries.slice(0, limit);
@@ -83,9 +70,9 @@ export const contractScoreboard: ScoreboardAPI = {
 
   async getPlayerBest(player) {
     if (!isContractDeployed()) return null;
-    const r = await contract().getBest.query(player);
-    if (!r.success) return null;
-    const v = Number(r.value);
+    const best = await contractQuery<bigint>(CONTRACT_NAME, "getBest", { player }, getBurnerSs58());
+    if (best === null) return null;
+    const v = Number(best);
     return v === 0 ? null : v;
   },
 };

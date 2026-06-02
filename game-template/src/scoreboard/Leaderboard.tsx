@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ScoreboardAPI, ScoreEntry } from "./api";
 import { isArcadeInstalled, resolveDisplayNames } from "./arcade";
 
@@ -7,6 +7,8 @@ interface Props {
   refreshKey: number;
   highlightPlayer?: `0x${string}`;
   limit?: number;
+  /** Optimistic just-played entry, merged in before the real fetch lands. */
+  pendingEntry?: ScoreEntry | null;
 }
 
 export function shortAddress(addr: string): string {
@@ -14,7 +16,29 @@ export function shortAddress(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-export function Leaderboard({ api, refreshKey, highlightPlayer, limit = 10 }: Props) {
+// Merge an optimistic entry into fetched scores: upsert by player keeping the
+// higher score (the contract stores the personal best), then re-sort + trim.
+function withPending(
+  scores: ScoreEntry[],
+  pending: ScoreEntry | null | undefined,
+  limit: number,
+): ScoreEntry[] {
+  if (!pending) return scores;
+  const byPlayer = new Map(scores.map((e) => [e.player.toLowerCase(), e]));
+  const existing = byPlayer.get(pending.player.toLowerCase());
+  if (!existing || pending.score > existing.score) {
+    byPlayer.set(pending.player.toLowerCase(), pending);
+  }
+  return [...byPlayer.values()].sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+export function Leaderboard({
+  api,
+  refreshKey,
+  highlightPlayer,
+  limit = 10,
+  pendingEntry,
+}: Props) {
   const [scores, setScores] = useState<ScoreEntry[]>([]);
   const [names, setNames] = useState<Map<string, string | null>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -40,16 +64,21 @@ export function Leaderboard({ api, refreshKey, highlightPlayer, limit = 10 }: Pr
     };
   }, [api, refreshKey, limit]);
 
+  const displayed = useMemo(
+    () => withPending(scores, pendingEntry, limit),
+    [scores, pendingEntry, limit],
+  );
+
   return (
     <div className="leaderboard">
       <h2>Top {limit}</h2>
-      {loading ? (
+      {loading && displayed.length === 0 ? (
         <p className="leaderboard-empty">Loading…</p>
-      ) : scores.length === 0 ? (
+      ) : displayed.length === 0 ? (
         <p className="leaderboard-empty">No scores yet. Be the first.</p>
       ) : (
         <ol className="leaderboard-list">
-          {scores.map((entry, i) => {
+          {displayed.map((entry, i) => {
             const isYou =
               highlightPlayer !== undefined &&
               entry.player.toLowerCase() === highlightPlayer.toLowerCase();

@@ -1,69 +1,8 @@
-import { getCdm, getContractAddress, isContractInstalled } from "./cdm";
+import { contractQuery, contractSendInBlock, getContractAddress, isContractInstalled } from "./cdm";
+import { getBurnerSigner, getBurnerSs58 } from "./signer";
 
 const ARCADE_NAME = "@example/arcade-playground";
 const LEADERBOARD_NAME = "@example/leaderboard-playground";
-
-interface QueryResult<T> {
-  success: boolean;
-  value: T;
-}
-
-interface GameInfoValue {
-  name: string;
-  image_uri: string;
-  registered_at: bigint;
-  last_activity: bigint;
-}
-
-interface RecentScoreValue {
-  game: `0x${string}`;
-  player: `0x${string}`;
-  score: bigint;
-  timestamp: bigint;
-}
-
-interface ArcadeContract {
-  registerGame: {
-    tx: (contract: `0x${string}`, name: string, image_uri: string) => Promise<unknown>;
-  };
-  setDisplayName: {
-    tx: (name: string) => Promise<unknown>;
-  };
-  recordScore: {
-    tx: (game: `0x${string}`) => Promise<unknown>;
-  };
-  getGameCount: { query: () => Promise<QueryResult<number>> };
-  getGameAt: { query: (i: number) => Promise<QueryResult<`0x${string}`>> };
-  getGameInfo: {
-    query: (game: `0x${string}`) => Promise<QueryResult<GameInfoValue>>;
-  };
-  getDisplayName: {
-    query: (player: `0x${string}`) => Promise<QueryResult<string>>;
-  };
-  getTotalPoints: {
-    query: (player: `0x${string}`) => Promise<QueryResult<bigint>>;
-  };
-  getPerGameBest: {
-    query: (
-      game: `0x${string}`,
-      player: `0x${string}`,
-    ) => Promise<QueryResult<bigint>>;
-  };
-  getPlayerCount: { query: () => Promise<QueryResult<number>> };
-  getPlayerAt: { query: (i: number) => Promise<QueryResult<`0x${string}`>> };
-  getRecentTotal: { query: () => Promise<QueryResult<number>> };
-  getRecentAt: {
-    query: (slot: number) => Promise<QueryResult<RecentScoreValue>>;
-  };
-  getRingSize: { query: () => Promise<QueryResult<number>> };
-}
-
-function arcade(): ArcadeContract {
-  // The generated CDM type isn't surfaced as an exact match for our usage, so
-  // we cast to a local interface.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (getCdm() as any).getContract(ARCADE_NAME) as ArcadeContract;
-}
 
 export function getArcadeAddress(): `0x${string}` | null {
   return getContractAddress(ARCADE_NAME);
@@ -78,19 +17,35 @@ export function isArcadeInstalled(): boolean {
 }
 
 export async function recordScore(game: `0x${string}`): Promise<void> {
-  await arcade().recordScore.tx(game);
+  await contractSendInBlock(
+    ARCADE_NAME,
+    "recordScore",
+    { game },
+    getBurnerSs58(),
+    getBurnerSigner(),
+  );
 }
 
 export async function setDisplayName(name: string): Promise<void> {
-  await arcade().setDisplayName.tx(name);
+  await contractSendInBlock(
+    ARCADE_NAME,
+    "setDisplayName",
+    { name },
+    getBurnerSs58(),
+    getBurnerSigner(),
+  );
 }
 
 export async function getDisplayName(
   player: `0x${string}`,
 ): Promise<string | null> {
-  const r = await arcade().getDisplayName.query(player);
-  if (!r.success) return null;
-  return r.value || null;
+  const name = await contractQuery<string>(
+    ARCADE_NAME,
+    "getDisplayName",
+    { player },
+    getBurnerSs58(),
+  );
+  return name ? name : null;
 }
 
 // Batched name lookup with an in-memory cache. The leaderboard usually shows
@@ -124,6 +79,11 @@ export async function resolveDisplayNames(
 export async function getTotalPoints(
   player: `0x${string}`,
 ): Promise<bigint> {
-  const r = await arcade().getTotalPoints.query(player);
-  return r.success ? r.value : 0n;
+  const total = await contractQuery<bigint>(
+    ARCADE_NAME,
+    "getTotalPoints",
+    { player },
+    getBurnerSs58(),
+  );
+  return total ?? 0n;
 }
