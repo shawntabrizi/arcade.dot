@@ -20,7 +20,7 @@ That's the whole architecture. Two interfaces (`GameComponentProps`, `Scoreboard
 
 ## Swap the game
 
-Replace Flappy Bird with anything that produces a numeric score — 2048, Snake, a clicker, a reaction-time test. Anything that ends with a single number is a fit.
+Replace Snake with anything that produces a numeric score — 2048, Flappy Bird, a clicker, a reaction-time test. Anything that ends with a single number is a fit.
 
 ### The contract
 
@@ -72,10 +72,10 @@ Three rules for a game component:
 2. **Wire it up.** In `src/App.tsx`, change one import and one JSX line:
 
    ```diff
-   - import { FlappyGame } from "./games/flappy/FlappyGame";
+   - import { SnakeGame } from "./games/snake/SnakeGame";
    + import { ClickerGame } from "./games/clicker/ClickerGame";
 
-   - <FlappyGame onGameEnd={onGameEnd} />
+   - <SnakeGame onGameEnd={onGameEnd} />
    + <ClickerGame onGameEnd={onGameEnd} />
    ```
 

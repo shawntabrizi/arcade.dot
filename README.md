@@ -6,7 +6,7 @@ Two independent apps live side by side:
 
 | Folder | What it is | Run it |
 | --- | --- | --- |
-| [`game-template/`](game-template/) | The publishable starter template — Flappy Bird + a swappable scoreboard backed by a PVM leaderboard contract on Paseo Asset Hub. `dot mod`-able and registry-publishable on its own. | `cd game-template && npm install && npm run dev` |
+| [`game-template/`](game-template/) | The publishable starter template — Snake + a swappable scoreboard backed by a PVM leaderboard contract on Paseo Asset Hub. `dot mod`-able and registry-publishable on its own. | `cd game-template && npm install && npm run dev` |
 | [`dashboard/`](dashboard/) | Read-only dashboard for the Arcade — top players, latest scores, and active games across the whole arcade. | `cd dashboard && npm install && npm run dev` |
 
 Each folder is self-contained with its own `package.json`, build, and docs — there is no shared workspace tooling. See each folder's `README.md` for details.

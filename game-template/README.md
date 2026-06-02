@@ -2,7 +2,7 @@
 
 A Polkadot Playground starter template. A single-player game with an **on-chain leaderboard** — designed so the **game** and the **scoreboard backend** stay independent. Swap either one without touching the other.
 
-Ships with Flappy Bird as the game and a PVM smart contract on Paseo Asset Hub as the leaderboard backend.
+Ships with Snake as the game and a PVM smart contract on Paseo Asset Hub as the leaderboard backend.
 
 ## What you need
 
@@ -67,8 +67,8 @@ The CLI also uploads `dist/` to Bulletin Chain and registers a `.dot` domain via
 
 ```
 ┌─────────────────────────────┐     ┌─────────────────────────────┐
-│ src/games/flappy/           │     │ src/scoreboard/             │
-│   FlappyGame.tsx            │     │   api.ts          (interface)│
+│ src/games/snake/            │     │ src/scoreboard/             │
+│   SnakeGame.tsx             │     │   api.ts          (interface)│
 │                             │     │   contract-impl.ts (default) │
 │ Knows nothing about chain,  │     │   local-impl.ts   (offline)  │
 │ storage, or the player.     │     │   Leaderboard.tsx (UI)       │
@@ -138,9 +138,9 @@ src/
 ├── main.tsx
 ├── games/
 │   ├── types.ts                  # GameComponentProps — the game contract
-│   └── flappy/
-│       ├── FlappyGame.tsx        # the shipped game
-│       └── flappy.css
+│   └── snake/
+│       ├── SnakeGame.tsx         # the shipped game
+│       └── snake.css
 └── scoreboard/
     ├── api.ts                    # ScoreboardAPI — the backend contract
     ├── contract-impl.ts          # on-chain implementation (default)

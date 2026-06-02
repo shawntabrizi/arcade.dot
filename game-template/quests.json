@@ -9,7 +9,7 @@
       "title": "Swap the game",
       "difficulty": 1,
       "estimated_minutes": 30,
-      "summary": "Replace Flappy Bird with your own game. Build a component that accepts GameComponentProps and calls onGameEnd(score) once when the game ends. The scoreboard, contract, leaderboard UI, and player input all keep working without changes — App.tsx is the only file you need to edit.",
+      "summary": "Replace Snake with your own game. Build a component that accepts GameComponentProps and calls onGameEnd(score) once when the game ends. The scoreboard, contract, leaderboard UI, and player input all keep working without changes — App.tsx is the only file you need to edit.",
       "teaches": [
         "React component contracts",
         "Designing for plug-in extensibility",

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { FlappyGame } from "./games/flappy/FlappyGame";
+import { SnakeGame } from "./games/snake/SnakeGame";
 import type { ScoreEntry } from "./scoreboard/api";
 import { Leaderboard, shortAddress } from "./scoreboard/Leaderboard";
 import {
@@ -172,7 +172,7 @@ export function App() {
 
       <div className="layout">
         <section className="game-col">
-          <FlappyGame onGameEnd={onGameEnd} />
+          <SnakeGame onGameEnd={onGameEnd} />
           {lastScore !== null && (
             <p className="last-score">
               Last score: <strong>{lastScore}</strong>

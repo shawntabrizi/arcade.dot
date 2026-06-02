@@ -4,7 +4,7 @@
   "track_id": "leaderboard-playground",
   "name": "Leaderboard Playground",
   "tagline": "A single-player game with an on-chain leaderboard you can mod.",
-  "description": "Starter template demonstrating clean separation between a game, an on-chain scoreboard, and a smart contract. Ships with Flappy Bird, a PVM leaderboard contract on Paseo Asset Hub, and a swappable scoreboard interface. Plug in any game that emits a numeric score, or swap the backend (contract → Bulletin, contract → real signer) without touching the game.",
+  "description": "Starter template demonstrating clean separation between a game, an on-chain scoreboard, and a smart contract. Ships with Snake, a PVM leaderboard contract on Paseo Asset Hub, and a swappable scoreboard interface. Plug in any game that emits a numeric score, or swap the backend (contract → Bulletin, contract → real signer) without touching the game.",
   "repository": "https://github.com/shawntabrizi/leaderboard-playground",
   "difficulty": "beginner",
   "reference_branch": "master",
