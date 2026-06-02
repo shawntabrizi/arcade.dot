@@ -10,5 +10,8 @@ export interface ScoreEntry {
 export interface ScoreboardAPI {
   submitScore(score: number): Promise<void>;
   getTopScores(limit?: number): Promise<ScoreEntry[]>;
+  // Most-recent submissions in submission order (newest first), including ones
+  // that didn't beat a personal best — so the UI can show live activity.
+  getRecentScores(limit?: number): Promise<ScoreEntry[]>;
   getPlayerBest(player: `0x${string}`): Promise<number | null>;
 }

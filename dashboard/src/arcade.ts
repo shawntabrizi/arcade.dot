@@ -62,6 +62,83 @@ async function q<T>(method: string, data: Record<string, unknown> = {}): Promise
   return r.value.response as T;
 }
 
+// Minimal slice of the leaderboard ABI: just the recent-activity ring. Lets the
+// dashboard read each registered game's *every-play* feed directly, rather than
+// the arcade's recent ring (which only captures personal-best beats).
+const LEADERBOARD_RECENT_ABI = [
+  { type: "function", name: "getRecentTotal", inputs: [], outputs: [{ name: "", type: "uint32" }], stateMutability: "view" },
+  { type: "function", name: "getRecentSize", inputs: [], outputs: [{ name: "", type: "uint32" }], stateMutability: "view" },
+  {
+    type: "function",
+    name: "getRecentAt",
+    inputs: [{ name: "slot", type: "uint32" }],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "player", type: "address" },
+          { name: "score", type: "uint128" },
+          { name: "timestamp", type: "uint64" },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+];
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const gameContracts = new Map<string, any>();
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function gameContract(address: Address): any {
+  let c = gameContracts.get(address);
+  if (!c) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    c = (createInkSdk(cdm().client, { atBest: true }) as any).getContract(
+      { abi: LEADERBOARD_RECENT_ABI },
+      address,
+    );
+    gameContracts.set(address, c);
+  }
+  return c;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function gameQuery<T>(contract: any, method: string, data: Record<string, unknown> = {}): Promise<T | null> {
+  try {
+    const r = await contract.query(method, { origin: QUERY_ORIGIN, data });
+    return r.success ? (r.value.response as T) : null;
+  } catch {
+    return null; // older game contracts predate the ring -> treated as no recent plays
+  }
+}
+
+// Up to `limit` recent plays from one game's ring, newest first. Empty if the
+// game's contract doesn't expose the ring (older deploy).
+async function gameRecent(address: Address, limit: number): Promise<RecentScore[]> {
+  const c = gameContract(address);
+  const total = await gameQuery<number>(c, "getRecentTotal");
+  if (!total) return [];
+  const ringSize = await gameQuery<number>(c, "getRecentSize");
+  if (!ringSize) return [];
+  const n = Math.min(total, ringSize, limit);
+  const slots = Array.from({ length: n }, (_, i) => (total - 1 - i + ringSize) % ringSize);
+  const rows = await Promise.all(
+    slots.map((slot) =>
+      gameQuery<{ player: Address; score: bigint; timestamp: bigint }>(c, "getRecentAt", { slot }),
+    ),
+  );
+  return rows
+    .filter((r): r is NonNullable<typeof r> => r !== null)
+    .map((r) => ({
+      game: address,
+      player: r.player,
+      displayName: null,
+      score: r.score,
+      timestamp: Number(r.timestamp),
+    }));
+}
+
 // Subscribe to new best blocks; the callback gets the head block number.
 // Returns an unsubscribe fn. Drives the dashboard's near-real-time refresh.
 export function onNewBlock(cb: (blockNumber: number) => void): () => void {
@@ -101,12 +178,15 @@ export async function getGames(): Promise<GameInfo[]> {
       ),
     ),
   );
+  // Derive last-activity from each game's recent ring (every play), falling
+  // back to the arcade's last_activity (PB-beats only) for older games.
+  const latest = await Promise.all(addrs.map((address) => gameRecent(address, 1)));
   return addrs.map((address, i) => ({
     address,
     name: infos[i].name,
     imageUri: infos[i].image_uri,
     registeredAt: Number(infos[i].registered_at),
-    lastActivity: Number(infos[i].last_activity),
+    lastActivity: latest[i][0]?.timestamp ?? Number(infos[i].last_activity),
   }));
 }
 
@@ -129,24 +209,20 @@ export async function getTopPlayers(limit = 10): Promise<PlayerPoints[]> {
   return players.slice(0, limit);
 }
 
+// Latest plays across every registered game — merged from each game's own
+// recent ring (which records ALL submissions), so the feed shows live activity
+// rather than just personal-best beats (what the arcade's own ring captures).
 export async function getRecent(limit = 20): Promise<RecentScore[]> {
-  const total = await q<number>("getRecentTotal");
-  if (total === 0) return [];
-  const ringSize = await q<number>("getRingSize");
-  const n = Math.min(total, ringSize, limit);
-  // Walk backwards from the most-recent slot.
-  const slots = Array.from({ length: n }, (_, i) => (total - 1 - i + ringSize) % ringSize);
-  const rows = await Promise.all(
-    slots.map((slot) =>
-      q<{ game: Address; player: Address; score: bigint; timestamp: bigint }>("getRecentAt", { slot }),
-    ),
+  const count = await q<number>("getGameCount");
+  if (count === 0) return [];
+  const addrs = await Promise.all(
+    Array.from({ length: count }, (_, i) => q<Address>("getGameAt", { index: i })),
   );
-  const names = await Promise.all(rows.map((r) => resolveName(r.player)));
-  return rows.map((r, i) => ({
-    game: r.game,
-    player: r.player,
-    displayName: names[i],
-    score: r.score,
-    timestamp: Number(r.timestamp),
-  }));
+  const perGame = await Promise.all(addrs.map((address) => gameRecent(address, limit)));
+  const merged = perGame
+    .flat()
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, limit);
+  const names = await Promise.all(merged.map((r) => resolveName(r.player)));
+  return merged.map((r, i) => ({ ...r, displayName: names[i] }));
 }

@@ -214,6 +214,23 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.recent-heading {
+  margin-top: 24px !important;
+}
+
+/* Recent plays have no rank column: player | score | time */
+.recent-list li {
+  grid-template-columns: 1fr auto auto;
+}
+
+.recent-list .when {
+  color: #7a7e87;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  min-width: 64px;
+  text-align: right;
+}
+
 .page-footer {
   margin-top: 48px;
   text-align: center;

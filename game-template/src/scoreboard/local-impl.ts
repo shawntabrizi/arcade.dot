@@ -21,14 +21,22 @@ function write(entries: ScoreEntry[]): void {
 
 export const localScoreboard: ScoreboardAPI = {
   async submitScore(score) {
+    // Keep entries in submission order (newest last); getTopScores sorts on
+    // read. One log serves both "top" and "recent".
     const entries = read();
     entries.push({ player: getBurnerH160(), score, timestamp: Date.now() });
-    entries.sort((a, b) => b.score - a.score);
-    write(entries.slice(0, MAX_ENTRIES));
+    write(entries.slice(-MAX_ENTRIES));
   },
 
   async getTopScores(limit = 10) {
-    return read().slice(0, limit);
+    return read()
+      .slice()
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+  },
+
+  async getRecentScores(limit = 10) {
+    return read().slice(-limit).reverse();
   },
 
   async getPlayerBest(player) {

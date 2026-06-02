@@ -68,6 +68,31 @@ export const contractScoreboard: ScoreboardAPI = {
     return entries.slice(0, limit);
   },
 
+  async getRecentScores(limit = 10) {
+    if (!isContractDeployed()) return [];
+    const origin = getBurnerSs58();
+    const total = (await contractQuery<number>(CONTRACT_NAME, "getRecentTotal", {}, origin)) ?? 0;
+    if (total === 0) return [];
+    const ringSize = (await contractQuery<number>(CONTRACT_NAME, "getRecentSize", {}, origin)) ?? 0;
+    if (ringSize === 0) return [];
+    const n = Math.min(total, ringSize, limit);
+    // Walk backwards from the most-recently-written slot.
+    const slots = Array.from({ length: n }, (_, i) => (total - 1 - i + ringSize) % ringSize);
+    const rows = await Promise.all(
+      slots.map((slot) =>
+        contractQuery<{ player: `0x${string}`; score: bigint; timestamp: bigint }>(
+          CONTRACT_NAME,
+          "getRecentAt",
+          { slot },
+          origin,
+        ),
+      ),
+    );
+    return rows
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+      .map((r) => ({ player: r.player, score: Number(r.score), timestamp: Number(r.timestamp) }));
+  },
+
   async getPlayerBest(player) {
     if (!isContractDeployed()) return null;
     const best = await contractQuery<bigint>(CONTRACT_NAME, "getBest", { player }, getBurnerSs58());
