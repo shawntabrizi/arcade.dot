@@ -6,6 +6,7 @@ import {
   getGames,
   getRecent,
   getTopPlayers,
+  onNewBlock,
 } from "./arcade";
 
 function shortAddr(a: string): string {
@@ -29,26 +30,48 @@ export function App() {
   const [players, setPlayers] = useState<Loadable<PlayerPoints[]>>({ state: "loading" });
   const [recent, setRecent] = useState<Loadable<RecentScore[]>>({ state: "loading" });
   const [games, setGames] = useState<Loadable<GameInfo[]>>({ state: "loading" });
+  const [block, setBlock] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    // `initial` surfaces errors on first load; on later refreshes we keep the
+    // last good data instead of flashing an error on a transient RPC hiccup.
     const run = async <T,>(
       fn: () => Promise<T>,
       set: (v: Loadable<T>) => void,
+      initial: boolean,
     ) => {
       try {
         const data = await fn();
         if (!cancelled) set({ state: "ok", data });
       } catch (err) {
-        if (!cancelled)
+        if (!cancelled && initial)
           set({ state: "error", error: err instanceof Error ? err.message : String(err) });
       }
     };
-    run(() => getTopPlayers(10), setPlayers);
-    run(() => getRecent(20), setRecent);
-    run(() => getGames(), setGames);
+
+    let refreshing = false;
+    const refresh = async (initial: boolean) => {
+      if (refreshing) return; // don't pile up if a refresh outlives a block
+      refreshing = true;
+      await Promise.all([
+        run(() => getTopPlayers(10), setPlayers, initial),
+        run(() => getRecent(20), setRecent, initial),
+        run(() => getGames(), setGames, initial),
+      ]);
+      refreshing = false;
+    };
+
+    refresh(true);
+    // Re-read on every new best block so the board tracks the chain live.
+    const off = onNewBlock((blockNumber) => {
+      if (cancelled) return;
+      setBlock(blockNumber);
+      refresh(false);
+    });
     return () => {
       cancelled = true;
+      off();
     };
   }, []);
 
@@ -58,6 +81,16 @@ export function App() {
         <h1>Arcade</h1>
         <p className="tagline">
           Cross-game leaderboard for every game built from the Polkadot Leaderboard Playground.
+        </p>
+        <p className="block-status">
+          {block === null ? (
+            <span className="block-connecting">connecting…</span>
+          ) : (
+            <>
+              <span className="block-dot" /> live · best block{" "}
+              <code>#{block.toLocaleString()}</code>
+            </>
+          )}
         </p>
       </header>
 

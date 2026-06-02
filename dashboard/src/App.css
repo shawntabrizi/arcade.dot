@@ -46,6 +46,47 @@ body {
   font-size: 14px;
 }
 
+.block-status {
+  margin: 8px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #6c7280;
+  font-size: 13px;
+}
+
+.block-status code {
+  background: #2a2e38;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: #e8e8ec;
+}
+
+.block-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3fd07a;
+  box-shadow: 0 0 0 0 rgba(63, 208, 122, 0.6);
+  animation: block-pulse 2s ease-out infinite;
+}
+
+.block-connecting {
+  color: #6c7280;
+}
+
+@keyframes block-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(63, 208, 122, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(63, 208, 122, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(63, 208, 122, 0);
+  }
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
