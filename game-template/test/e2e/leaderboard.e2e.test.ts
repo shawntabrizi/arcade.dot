@@ -59,13 +59,15 @@ describe("leaderboard E2E (paseo-next-v2)", () => {
 
   // Read-only: queries don't sign, so this needs no faucet and costs nothing.
   // Proves cdm.json + ABI + the live WebSocket round-trip actually work.
+  // Uses a fixed sentinel address (never a real player) rather than the burner,
+  // which the write test above mutates when both run in the same process.
   it("connects to the live leaderboard contract", async () => {
     if (!FAUCET) {
       console.warn(
         "[e2e] write test skipped: set E2E_FAUCET_SURI to a funded paseo account to run it.",
       );
     }
-    // A fresh burner has no on-chain best; the query still round-trips.
-    expect(await contractScoreboard.getPlayerBest(getBurnerH160())).toBeNull();
+    const NEVER_PLAYED = "0x000000000000000000000000000000000000dead" as const;
+    expect(await contractScoreboard.getPlayerBest(NEVER_PLAYED)).toBeNull();
   });
 });
