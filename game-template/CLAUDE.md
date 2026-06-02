@@ -49,7 +49,8 @@ Don't reinvent the recipes here — the doc is the source of truth for users *an
 
 - Don't import `src/scoreboard/` from inside a game. The whole point of the architecture is that games are storage-agnostic.
 - Don't read or write `localStorage` for score data from inside a game.
-- Keep `submitScore` resolving only after the write is durable. The UI refreshes the leaderboard on resolve.
+- Writes resolve at **best-block inclusion**, not finalization, for latency (`src/scoreboard/tx.ts`). This deliberately trades finality durability for speed — fine for a game; the tx still finalizes. Reads use a best-block ink SDK (`inkSdkBest` in `cdm.ts`) so they stay coherent with just-included writes. Don't switch writes back to `signAndSubmit` (finalization) without surfacing the latency cost; don't read at finalized while writing at best-block (you'll get stale reads / `AccountUnmapped`).
+- The leaderboard updates optimistically on submit and reconciles on refresh. The burner fund + `map_account` runs eagerly on load, off the submit path; the arcade `record_score` sync is fire-and-forget. Keep these off the perceived latency path.
 - The default backend is the contract. Don't switch the default to `localScoreboard` without asking — the on-chain story is the architectural point of this template.
 - Don't bypass the contract by writing scores directly to localStorage when the contract is unavailable. The current behavior (banner + disabled submission) is intentional — it surfaces the deploy step rather than papering over it.
 
