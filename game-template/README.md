@@ -33,6 +33,21 @@ Open <http://localhost:5173>. The game starts immediately. Scores are saved to y
 
 If you start `npm run dev` before deploying, the page renders with a banner explaining how to deploy. Submissions are disabled until the contract is in `cdm.json`.
 
+## Testing end-to-end
+
+Both flows run against the **live paseo-next-v2** contracts in `cdm.json` — no local node. A fresh per-run burner is funded from a faucet account, so they spend a little testnet PAS (~1 PAS + fees). On public Paseo `//Alice` is drained, so you provide a funded account:
+
+```bash
+# Manual: play through it in the browser, signed by a funded faucet.
+VITE_FAUCET_SURI="<12/24-word mnemonic, optionally //path>" npm run dev
+
+# Automated: drives the real submit_score + arcade record_score path and
+# asserts the leaderboard contract reflects the score on-chain.
+E2E_FAUCET_SURI="<funded mnemonic>" npm run test:e2e
+```
+
+The test (`test/e2e/leaderboard.e2e.test.ts`) exercises the actual app modules (`contractScoreboard`, the burner signer, the fund + `map_account` bootstrap). Without `E2E_FAUCET_SURI` it runs only a free, read-only connectivity check and skips the spending test. Arcade aggregation is asserted only when the game is registered with the Arcade (a one-time `arcade.registerGame` step); otherwise `record_score` is a no-op and the test says so.
+
 ## Publish to Playground
 
 Once the game works locally, publish the contract and frontend to Polkadot Playground in one shot:
