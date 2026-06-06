@@ -207,7 +207,10 @@ conforming contract generically, with no game-specific code.
 
 Contracts are written in ink! on PolkaVM (`pvm_contract`) and expose a
 Solidity-compatible ABI via `pallet_revive`. Players are identified by H160
-addresses. All timestamps are Unix milliseconds from the chain's timestamp.
+addresses. All timestamps are **Unix seconds** as read from the chain
+(verified on paseo-next-v2; an earlier draft said milliseconds —
+the chain reports seconds). Score *durations* (§4.2 `scoreFormat == 1`)
+remain milliseconds; they are game-measured, not chain-derived.
 Scores are `u128`.
 
 The standard is organized as two modules. **In version 1 both are

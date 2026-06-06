@@ -652,7 +652,8 @@ mod contract {
         }
     }
 
-    /// Current block timestamp in Unix milliseconds (§4). pallet_revive writes
+    /// Current block timestamp in Unix seconds (§4; verified on-chain on
+    /// paseo-next-v2 during item-4 deployment). pallet_revive writes
     /// the u256 timestamp little-endian, so the value lives in the low 8 bytes —
     /// same idiom as the registry and prototype contracts.
     fn block_timestamp() -> u64 {

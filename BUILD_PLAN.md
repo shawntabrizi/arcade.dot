@@ -33,8 +33,15 @@ Test gates: contracts → `cargo test`; template/dashboard logic → unit tests
       on-chain in item 4. ScoreSubmitted topic0
       0x860916283ae2e9eee2b7aa65ba521da02a25980e6ea2ac8b2d777f728aa9f19a.
       ABI method names camelCase; struct field names stay snake_case.)
-- [ ] 4. Deploy both to Paseo Asset Hub (paseo-next-v2); record addresses in
+- [x] 4. Deploy both to Paseo Asset Hub (paseo-next-v2); record addresses in
       `cdm.json`; verify reads back (§10.3 step 8 style).
+      (All 11 on-chain checks pass incl. the hand-encoded cross-contract
+      register and a real submitScore. Addresses in contracts/cdm.json +
+      DEPLOYMENT.md; deployer/owner = //Alice. Finding: chain timestamps are
+      Unix SECONDS — SPEC §4 and contract comments amended. Note:
+      `playground contract deploy` is a CDM-publish pipeline without
+      constructor-arg support; deployment uses contracts/scripts/
+      deploy-and-verify.mjs via PAPI + sdk-ink instead.)
 
 ## Phase 2 — Integration risk spikes (SPEC §2.3) — run early, results recorded here
 
