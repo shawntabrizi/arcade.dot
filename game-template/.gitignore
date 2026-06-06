@@ -12,3 +12,7 @@ tsconfig.tsbuildinfo
 .arcade-pipeline.json
 # Temp runner copy used by contracts/scripts/run-deploy.sh.
 .deploy-runner.mjs
+# Playwright e2e output (test:e2e).
+test-results/
+playwright-report/
+.playwright/

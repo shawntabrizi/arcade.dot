@@ -31,11 +31,12 @@ cat <<'EOF'
 [setup] Done.
 
 To run with the on-chain leaderboard (the default):
-  dot deploy --contracts             # build + deploy the leaderboard contract
+  npm run arcade:deploy-contract     # build + deploy the GCS game contract
   npm run dev                        # start the dev server
 
-To publish to Polkadot Playground:
-  dot deploy --contracts --playground --moddable
+To deploy + register on the arcade (the full pipeline):
+  playground init                    # one-time login (QR + mobile app)
+  npm run arcade:ship                # deploy, upload thumbnail, register, verify
 
 To run without deploying (localStorage fallback):
   See docs/modding.md → "Swap the backend → drop back to localStorage".

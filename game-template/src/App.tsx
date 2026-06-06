@@ -5,8 +5,16 @@ import { Leaderboard, shortAddress } from "./scoreboard/Leaderboard";
 import { contractScoreboard, isContractDeployed } from "./scoreboard/reads";
 import { Scoreboard, type GameOverOutcome } from "./scoreboard/scoreboard";
 import { createSdkGateway } from "./scoreboard/sdk-gateway";
+import { createFakeGateway } from "./scoreboard/fake-gateway";
 import { getGcsAddress } from "./scoreboard/gcs";
 import arcadeConfig from "../arcade.config.json";
+
+// ⚠ TEST-ONLY seam (SPEC §8.3 Playwright flows). When VITE_ARCADE_FAKE_GATEWAY
+// is set, the composition root swaps the real product-sdk ChainGateway for the
+// in-browser fake (fake-gateway.ts), driven per-test via window.__ARCADE_FAKE__.
+// The fake is referenced only on the FAKE_GATEWAY branch below; with the flag
+// unset, Vite tree-shakes it out of a normal build, which never imports a chain.
+const FAKE_GATEWAY = import.meta.env.VITE_ARCADE_FAKE_GATEWAY === "1";
 
 // ── Template configuration (SPEC §6.5 / §8.3 / §10.4) ───────────────────────
 // arcade.config.json is the single source of truth (SPEC §6.5). `requiresAccount`
@@ -14,10 +22,17 @@ import arcadeConfig from "../arcade.config.json";
 // the in-game launch gate and the dashboard badge never disagree. Set it to true
 // for multiplayer / on-chain-state games that cannot be played as a guest:
 // sign-in is then required at launch instead of at game over (SPEC §8.3).
-const REQUIRES_ACCOUNT = arcadeConfig.requiresAccount === true;
+// requiresAccount: from config in a real build; from the per-test fake config
+// (window.__ARCADE_FAKE__) under the test flag so test 4 can toggle the launch
+// gate without a rebuild.
+const REQUIRES_ACCOUNT = FAKE_GATEWAY
+  ? globalThis.window?.__ARCADE_FAKE__?.config.requiresAccount === true
+  : arcadeConfig.requiresAccount === true;
 
 const SCOREBOARD = contractScoreboard;
-const CONTRACT_DEPLOYED = isContractDeployed();
+// Under the test flag the (faked) contract is always "deployed" so the
+// save-score / submit flow is active without a chain.
+const CONTRACT_DEPLOYED = FAKE_GATEWAY || isContractDeployed();
 // Guest scores survive the session keyed per game; the GCS address is a stable
 // per-game key on this origin.
 const GAME_KEY = getGcsAddress() ?? "local";
@@ -38,10 +53,14 @@ export function App() {
   // gateway is the only thing that touches the chain (SPEC §8.1).
   const scoreboard = useMemo(
     () =>
-      new Scoreboard(createSdkGateway(), globalThis.localStorage, {
-        gameKey: GAME_KEY,
-        requiresAccount: REQUIRES_ACCOUNT,
-      }),
+      new Scoreboard(
+        FAKE_GATEWAY ? createFakeGateway() : createSdkGateway(),
+        globalThis.localStorage,
+        {
+          gameKey: GAME_KEY,
+          requiresAccount: REQUIRES_ACCOUNT,
+        },
+      ),
     [],
   );
 

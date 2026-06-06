@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
+    "test:e2e": "playwright test",
+    "arcade:gen-thumbnail": "node scripts/gen-thumbnail.mjs",
     "arcade:deploy-contract": "node scripts/deploy-contract.mjs",
     "arcade:upload-thumbnail": "node scripts/upload-thumbnail.mjs",
     "arcade:register": "node scripts/register-listing.mjs",
@@ -24,6 +26,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.60.0",
     "@polkadot-labs/hdkd": "^0.0.28",
     "@polkadot-labs/hdkd-helpers": "^0.0.30",
     "@types/react": "^19.0.0",

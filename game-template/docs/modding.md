@@ -12,7 +12,7 @@ Three folders, three responsibilities:
 
 The smart contract sits behind the scoreboard layer:
 
-- **`contracts/leaderboard/lib.rs`** — A PVM contract on Paseo Asset Hub. Stores `best[caller_h160] = score` and an enumerable index of player addresses. The `contractScoreboard` in TypeScript talks to it via `@dotdm/cdm`.
+- **`contracts/leaderboard/lib.rs`** — the GCS v1 reference contract (SPEC §4.6) on Paseo Asset Hub: personal bests keyed by `caller()` (H160), a top-100 leaderboard, a 20-slot recent ring, and activity stats. The TypeScript reads it via `@polkadot-api/sdk-ink` (`src/scoreboard/gcs.ts` / `reads.ts`); writes go through the `ChainGateway` seam (`gateway.ts` → `sdk-gateway.ts`).
 
 That's the whole architecture. Two interfaces (`GameComponentProps`, `ScoreboardAPI`) define the seams; everything else is implementation behind one of them.
 
@@ -101,64 +101,45 @@ Anything that ends with a single number is a fit.
 
 ## Swap the backend
 
-The shipped default is `contractScoreboard` — scores written to a PVM contract on Paseo Asset Hub, signed by a per-browser **burner wallet** (sr25519 keypair persisted in `localStorage`). On a player's first submit, a configurable **faucet account** funds the burner and the burner registers itself with `pallet_revive`. Two interesting alternatives:
+The shipped default reads scores from the GCS contract on Paseo Asset Hub (`contractScoreboard` in `src/scoreboard/reads.ts`); writes go through the `ChainGateway` seam, signed by the **host wallet** (SPEC §8.1 — no burner, no faucet). Two interesting alternatives:
 
-- **`localScoreboard`** — already in the repo. Drops back to `localStorage`. Useful for offline dev, demos, and showing the architecture without deploying.
-- **A custom backend** — anything implementing `ScoreboardAPI`. Examples below.
+- **`localScoreboard`** — already in the repo (`src/scoreboard/local-impl.ts`). Drops back to `localStorage`. Useful for offline dev, demos, and showing the architecture without deploying.
+- **A custom read backend** — anything implementing `ScoreboardAPI`. Examples below.
 
-### The contract
+### The contracts
 
-A backend is anything that satisfies `ScoreboardAPI` (defined in `src/scoreboard/api.ts`):
+There are two seams here. The **read** surface the in-game board consumes is `ScoreboardAPI` (defined in `src/scoreboard/api.ts`):
 
 ```ts
 export interface ScoreboardAPI {
-  submitScore(score: number): Promise<void>;
   getTopScores(limit?: number): Promise<ScoreEntry[]>;
+  getRecentScores(limit?: number): Promise<ScoreEntry[]>;
   getPlayerBest(player: `0x${string}`): Promise<number | null>;
 }
 ```
 
-`submitScore` no longer takes a player argument — the identity comes from the signer that the backend has configured. `getPlayerBest` takes the player's H160 (e.g. the burner's, available via `getBurnerH160()` in `signer.ts`).
+The **write/identity** surface is `ChainGateway` (`src/scoreboard/gateway.ts`) — `connect()`, `ensureMapped()`, `submitScore(score)`, plus the reads. The guest / sign-in policy in `scoreboard.ts` drives it; the real product-sdk wiring lives in `sdk-gateway.ts`. Writes take no player argument — identity comes from the connected host wallet account.
 
-The `Leaderboard` component, the player input, and the game all stay exactly the same. The only file that knows which backend is in use is `src/App.tsx`.
+The `Leaderboard` component, the game, and the policy layer all stay the same when you swap a read backend. The only file that wires a specific game to a specific board is `src/App.tsx`.
 
 ### Recipe — drop back to localStorage
 
 For offline dev, presentations, or testing UI changes without funding accounts:
 
 ```diff
-- import { contractScoreboard, isLeaderboardContractDeployed } from "./scoreboard/contract-impl";
+- import { contractScoreboard, isContractDeployed } from "./scoreboard/reads";
 - const SCOREBOARD = contractScoreboard;
-- const CONTRACT_DEPLOYED = isLeaderboardContractDeployed();
+- const CONTRACT_DEPLOYED = isContractDeployed();
 + import { localScoreboard } from "./scoreboard/local-impl";
 + const SCOREBOARD = localScoreboard;
 + const CONTRACT_DEPLOYED = true; // localStorage is always "deployed"
 ```
 
-The game and `Leaderboard` keep working unchanged.
+The game and `Leaderboard` keep working unchanged. (Note: this swaps only the *read* board; the save flow still goes through `ChainGateway`.)
 
-### Recipe — replace the burner with a real signer
+### Note — identity is the host wallet (don't reintroduce burners)
 
-By default, each browser holds its own burner sr25519 keypair (`src/scoreboard/signer.ts`), and the faucet (configured via `VITE_FAUCET_SURI`) funds it on first submit. That's fine for demos but two things break it in production: the faucet exhausts as players grow, and each new browser is a brand-new identity (no portability across devices). To swap in real keys:
-
-1. Pick a signer source. Common options:
-   - **Polkadot extension / mobile app** via `@polkadot-apps/signer`'s `SignerManager`
-   - **WalletConnect** for a session-based flow
-   - **Session keys** from the playground.dot Polkadot mobile app sign-in flow
-
-2. Edit `src/scoreboard/signer.ts`. Replace the burner-generation logic with a function that resolves to the user's `PolkadotSigner` and their ss58 address:
-
-   ```ts
-   import { signerManager } from "./your-signer-setup";
-
-   function ensureBurner() {
-     const account = signerManager.getState().selectedAccount;
-     if (!account) throw new Error("Not connected — please sign in first.");
-     return { signer: account.getSigner(), ss58: account.address, h160: ss58ToEthereum(account.address).asHex() };
-   }
-   ```
-
-3. Decide what to do with the bootstrap. With a real signer the user controls their own balance and mapping — you can either drop `src/scoreboard/bootstrap.ts` entirely and surface a "you need PAS + a one-time `Revive.map_account` call" prompt, or keep it and let the faucet still subsidize first-time players.
+Players sign with their **host wallet account** via product-sdk's `SignerManager` (SPEC §8.1). The old per-browser burner-wallet + `//Alice` faucet model is **removed** — do not bring it back. The single chain seam is `ChainGateway` (`src/scoreboard/gateway.ts`); the real wiring (connect → `ensureAccountMapped` → `submitScore` at best-block) lives in `src/scoreboard/sdk-gateway.ts`. To target a different signer source, change `sdk-gateway.ts` behind the `ChainGateway` seam — nothing above it needs to know.
 
 ### Recipe — Bulletin-backed match history
 
@@ -178,19 +159,18 @@ Use the contract for the hot index (player → best score) and Bulletin for the 
 
 ## Modifying the contract
 
-The contract lives in `contracts/leaderboard/lib.rs`. After changes:
+The contract lives in `contracts/leaderboard/lib.rs` — the GCS v1 reference implementation (SPEC §4.6). The template is designed to **deploy it unmodified**: its ABI is identical for every conforming game, which is what lets the dashboard read any game generically. If you change it, you risk breaking that conformance — keep `arcadeVersion()` returning `1` and the §4 read/write surface intact. After changes:
 
 ```bash
-dot deploy --contracts
+npm run arcade:deploy-contract
 ```
 
-This rebuilds and redeploys the contract, then rewrites `cdm.json` with the new address and ABI. The frontend re-reads it on next dev server restart.
+This rebuilds and redeploys the contract (with the score-ordering/format/unit from `arcade.config.json` and the registry address from `cdm.json` as constructor args), then rewrites `cdm.json` with the new address and ABI. The frontend re-reads it on next dev server restart.
 
 ### Common contract changes
 
-- **Add anti-spam:** rate-limit per caller (e.g. one submission per N blocks), or require a small fee.
-- **Register with a singleton `Arcade` contract** so this game shows up in a global leaderboard alongside every other game built from this template (in progress — see the Arcade plan).
-- **Optional display name on-chain.** Today addresses render as truncated hex; a per-caller `name: String` mapping (or delegation to the Arcade) gives them human-readable labels.
+- **Add anti-spam:** rate-limit per caller (e.g. one submission per N blocks), or require a small fee — but keep `submitScore` non-reverting on non-improving scores (SPEC §4.2).
+- **Adjust the registration gate.** `updateListing` is gated `caller() == owner`; swap in a multisig or DAO check if you want shared control of the listing.
 
 ---
 

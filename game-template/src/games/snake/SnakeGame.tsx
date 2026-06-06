@@ -169,8 +169,32 @@ export function SnakeGame({ onGameEnd }: GameComponentProps) {
       raf = requestAnimationFrame(loop);
     };
 
+    // ⚠ TEST-ONLY: a deterministic game-over hook for the Playwright e2e suite
+    // (SPEC §8.3 flows). Steering into a wall is timing-dependent and flaky;
+    // this lets a test end a match at a chosen score with no animation race.
+    // Exposed only when VITE_ARCADE_FAKE_GATEWAY is set, so it is absent from a
+    // normal build. window.__snakeForceGameOver(score) fires onGameEnd once.
+    let detachHook: (() => void) | undefined;
+    if (import.meta.env.VITE_ARCADE_FAKE_GATEWAY === "1") {
+      const force = (forced: number) => {
+        const s = stateRef.current;
+        s.score = forced;
+        setScore(forced);
+        die(s);
+      };
+      (window as unknown as { __snakeForceGameOver?: (n: number) => void }).__snakeForceGameOver =
+        force;
+      detachHook = () => {
+        delete (window as unknown as { __snakeForceGameOver?: (n: number) => void })
+          .__snakeForceGameOver;
+      };
+    }
+
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      detachHook?.();
+    };
   }, [onGameEnd]);
 
   // Touch: swipe to set direction (and start).

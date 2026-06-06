@@ -21,47 +21,53 @@ curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/inst
 # Frontend deps
 npm install
 
-# Build + deploy the leaderboard contract to Paseo Asset Hub.
-# Writes the new address into cdm.json.
-dot deploy --contracts
+# Build + deploy the GCS game contract to Paseo Asset Hub.
+# Writes the new address + ABI into cdm.json.
+npm run arcade:deploy-contract
 
 # Dev server
 npm run dev
 ```
 
-Open <http://localhost:5173>. The game starts immediately. Scores are saved to your deployed contract; the leaderboard reads them back live.
+Open <http://localhost:5173>. The game starts immediately as a **guest** — no account, no funding, zero chain interaction. When a guest sets a score worth keeping, game over prompts *"Sign in to save your score"* (host wallet, SPEC §8.3). The leaderboard reads the contract back live.
 
-If you start `npm run dev` before deploying, the page renders with a banner explaining how to deploy. Submissions are disabled until the contract is in `cdm.json`.
+If you start `npm run dev` before deploying, the page renders with a banner explaining how to deploy. Score saving is disabled until the contract is in `cdm.json`.
 
-## Testing end-to-end
-
-Both flows run against the **live paseo-next-v2** contracts in `cdm.json` — no local node. A fresh per-run burner is funded from a faucet account, so they spend a little testnet PAS (~1 PAS + fees). On public Paseo `//Alice` is drained, so you provide a funded account:
+## Testing
 
 ```bash
-# Manual: play through it in the browser, signed by a funded faucet.
-VITE_FAUCET_SURI="<12/24-word mnemonic, optionally //path>" npm run dev
-
-# Automated: drives the real submit_score + arcade record_score path and
-# asserts the leaderboard contract reflects the score on-chain.
-E2E_FAUCET_SURI="<funded mnemonic>" npm run test:e2e
+npm test        # unit tests (vitest): the scoreboard policy + pipeline validation
+npm run test:e2e  # Playwright: the guest → save-score → sign-in flows (chain faked)
 ```
 
-The test (`test/e2e/leaderboard.e2e.test.ts`) exercises the actual app modules (`contractScoreboard`, the burner signer, the fund + `map_account` bootstrap). Without `E2E_FAUCET_SURI` it runs only a free, read-only connectivity check and skips the spending test. Arcade aggregation is asserted only when the game is registered with the Arcade (a one-time `arcade.registerGame` step); otherwise `record_score` is a no-op and the test says so.
+The Playwright tests fake the chain at the `ChainGateway` seam — they never touch
+a network or spend testnet PAS. The full real round-trip
+(`SignerManager` → `ensureAccountMapped` → `submitScore`) is validated inside a
+Triangle host, not here.
 
-## Publish to Playground
+## Deploy & register (the arcade pipeline)
 
-Once the game works locally, publish the contract and frontend to Polkadot Playground in one shot:
+The full pipeline — deploy contract, upload thumbnail, publish frontend, register
+the listing, verify — is documented for agents in [`CLAUDE.md`](CLAUDE.md) §3.
+The human runs one command first:
 
 ```bash
-dot deploy --contracts --playground --moddable
+playground init   # QR scan with the Polkadot mobile app — see "What you need"
 ```
 
-Same `--contracts` flag as the dev flow plus two more:
+Then either run the steps individually or one-shot:
 
-- `--playground` — register the deploy in the Playground registry so the app shows in your "my apps" list. The publish is signed by your account so the contract records you as the owner.
-- `--moddable` — record this repo's URL in the Bulletin metadata so others can clone and mod the source with `dot mod`. Reads your existing `origin` and fails fast if it's missing, private, or not GitHub.
+```bash
+npm run arcade:ship
+```
 
-The CLI also uploads `dist/` to Bulletin Chain and registers a `.dot` domain via DotNS. Interactive prompts cover `--signer` (`phone` to sign with your account, `dev` for shared keys), `--domain` (DotNS label), and `--buildDir` (default `dist/`).
+`arcade:ship` runs the contract deploy, thumbnail upload, listing registration,
+and verify, and prints the exact `playground deploy …` command for publishing the
+frontend (that one step signs with your playground session, so you run it
+yourself). It stops non-zero at the first failure — no silent partial deploy.
+`arcade.config.json` is the single source of truth: name, type, description,
+`requiresAccount`, thumbnail path, `.dot` domain, and the contract's
+score-ordering/format/unit (see [`CLAUDE.md`](CLAUDE.md) §2).
 
 ## Architecture
 
@@ -69,7 +75,7 @@ The CLI also uploads `dist/` to Bulletin Chain and registers a `.dot` domain via
 ┌─────────────────────────────┐     ┌─────────────────────────────┐
 │ src/games/snake/            │     │ src/scoreboard/             │
 │   SnakeGame.tsx             │     │   api.ts          (interface)│
-│                             │     │   contract-impl.ts (default) │
+│                             │     │   reads.ts        (default)  │
 │ Knows nothing about chain,  │     │   local-impl.ts   (offline)  │
 │ storage, or the player.     │     │   Leaderboard.tsx (UI)       │
 │ Calls onGameEnd(score) once.│     │                             │
@@ -86,29 +92,24 @@ The CLI also uploads `dist/` to Bulletin Chain and registers a `.dot` domain via
                   └─────────────────────────────────────┘
 
 contracts/leaderboard/lib.rs
-  PVM smart contract — keyed by caller (H160), stores each player's personal best.
+  GCS v1 reference contract (SPEC §4.6) — keyed by caller (H160); personal
+  bests, a top-100 leaderboard, a 20-slot recent ring, and activity stats.
 ```
 
 The seam is `GameComponentProps` (in [`src/games/types.ts`](src/games/types.ts)) on one side and `ScoreboardAPI` (in [`src/scoreboard/api.ts`](src/scoreboard/api.ts)) on the other. Anything implementing one of those is a drop-in.
 
 ## Identity model (read this)
 
-The contract is keyed by `caller()` — the H160 the runtime maps the substrate signer to. Each browser holds its own **burner wallet** (sr25519 mnemonic in `localStorage`, see [`src/scoreboard/signer.ts`](src/scoreboard/signer.ts)). That burner is what signs `submit_score`, so each browser shows up as a distinct H160 on the leaderboard.
+A player is their **host wallet account** — the Polkadot account from the host environment, exposed to the game via product-sdk's `SignerManager` (SPEC §8.1). The burner-wallet + `//Alice` faucet machinery is **removed entirely**.
 
-A fresh burner has no balance and isn't registered with `pallet_revive`, so on first submit [`src/scoreboard/bootstrap.ts`](src/scoreboard/bootstrap.ts) runs a one-time setup using a **faucet account**:
+The flow lives in the scoreboard layer (`src/scoreboard/`):
 
-1. The faucet calls `Balances.transfer_keep_alive` to fund the burner.
-2. The burner calls `Revive.map_account()` to register itself as a contract caller.
-3. The burner signs `submit_score(score)`.
+- **Guest mode (default) = zero chain interaction.** No account, no funding, no mapping. The game runs; a score worth keeping is held in `localStorage` so it survives the session.
+- **At game over**, a guest who beat their locally-known best is prompted *"Sign in to save your score"*. Accepting runs, once: `SignerManager.connect("host")` → `ensureAccountMapped` (idempotent `pallet_revive` mapping) → `submitScore` at best-block.
+- **Signed-in players** submit directly at game over (every play counts; a non-improving `submitScore` never reverts — SPEC §4.2).
+- **`requiresAccount`** games (set in `arcade.config.json`) gate sign-in at launch instead of at game over.
 
-Three finalized extrinsics — expect ~30s on the first submit, then one tx per submit after.
-
-The faucet defaults to `//Alice`, which works on a local revive dev node. On the public Paseo Asset Hub testnet, `//Alice` is drained — copy [`.env.example`](.env.example) to `.env.local` and set `VITE_FAUCET_SURI` to a funded account. The well-known `//Bob` dev key still works there today; for sustained use, paste your `~/.cdm/accounts.json` mnemonic (the same account `dot init` funded for you).
-
-Trade-offs:
-
-- **Pro:** zero player-side auth UX. No extension, no manual faucet, distinct identity per browser.
-- **Con:** the faucet pays ~1 PAS per new player. Every browser session creates a new burner unless `localStorage` carries one over. Suitable for starter / demo / hackathon use; for production replace the burner with an extension signer (see [`docs/modding.md`](docs/modding.md)).
+The single chain seam is `ChainGateway` ([`src/scoreboard/gateway.ts`](src/scoreboard/gateway.ts)); the real product-sdk wiring is isolated in [`src/scoreboard/sdk-gateway.ts`](src/scoreboard/sdk-gateway.ts). Player display names are the dashboard's job (DotNS reverse resolution, SPEC §8.2); in-game the board shows truncated H160 addresses.
 
 ## Swap the game
 
@@ -118,7 +119,7 @@ See [`docs/modding.md`](docs/modding.md) → "Swap the game" for the recipe.
 
 ## Swap the backend
 
-The default backend is the on-chain contract. Two alternatives are interesting:
+The default read backend is the on-chain GCS contract (`src/scoreboard/reads.ts`); writes go through the `ChainGateway` seam, signed by the host wallet. Two alternatives are interesting:
 
 - **localStorage** (`src/scoreboard/local-impl.ts`) — still shipped. Useful for offline dev or tutorials where you want to demo the architecture without deploying.
 - **Bulletin-augmented** — keep the contract for the index, write full match history to Bulletin Chain.
@@ -143,7 +144,10 @@ src/
 │       └── snake.css
 └── scoreboard/
     ├── api.ts                    # ScoreboardAPI — the backend contract
-    ├── contract-impl.ts          # on-chain implementation (default)
+    ├── gateway.ts                # ChainGateway — the one chain seam
+    ├── scoreboard.ts            # guest / sign-in policy (SPEC §8)
+    ├── reads.ts                  # GCS contract reads (default)
+    ├── sdk-gateway.ts           # real product-sdk wiring
     ├── local-impl.ts             # localStorage fallback
     └── Leaderboard.tsx           # UI — backend-agnostic
 Cargo.toml                        # Rust workspace
@@ -158,9 +162,8 @@ Convention files for the playground registry: [`template.json`](template.json), 
 See [`quests.json`](quests.json) for the full list. Highlights:
 
 - **Swap the game** — anything producing a numeric score plugs in.
-- **Swap the burner for an extension signer** — replace `src/scoreboard/signer.ts` with the Polkadot extension or mobile app, so players hold their own keys instead of a browser burner.
 - **Bulletin replay history** — store full match history off-chain, content-addressed; contract holds the index.
-- **Cross-game scoring** — a singleton Arcade contract aggregates scores across every game built from this template (in progress).
+- **Custom read backend** — anything implementing `ScoreboardAPI` is a drop-in for the in-game board.
 
 ## Why this shape
 

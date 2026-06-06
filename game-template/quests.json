@@ -22,21 +22,20 @@
       ]
     },
     {
-      "id": "extension-signer",
-      "title": "Swap the burner for an extension signer",
+      "id": "custom-signer",
+      "title": "Target a different signer source",
       "difficulty": 2,
       "estimated_minutes": 45,
-      "summary": "By default each browser holds its own burner sr25519 keypair, and a faucet funds it on first submit. Replace src/scoreboard/signer.ts with the Polkadot extension or mobile app so players hold their own keys — identity becomes portable across devices and the faucet stops being a bottleneck.",
+      "summary": "By default players sign with their host wallet account via product-sdk's SignerManager (SPEC §8.1). Behind the ChainGateway seam (src/scoreboard/sdk-gateway.ts) you can target a different source — a browser extension or WalletConnect — without touching the game, the scoreboard policy, or the UI.",
       "teaches": [
-        "@polkadot-apps/signer SignerManager",
-        "Account selection / connection UX",
+        "The ChainGateway seam (gateway.ts) between policy and chain",
+        "product-sdk SignerManager + account selection UX",
         "PolkadotSigner shape used by polkadot-api"
       ],
       "acceptance": [
-        "User connects an account before submitting",
-        "Submissions are signed by the connected account",
-        "App.tsx surfaces the connected address in the UI",
-        "The faucet/bootstrap path is either removed or only kicks in for first-time players"
+        "Only src/scoreboard/sdk-gateway.ts changes (the seam holds)",
+        "connect() resolves the player's H160 and submitScore is signed by them",
+        "App.tsx surfaces the connected address in the UI"
       ]
     },
     {

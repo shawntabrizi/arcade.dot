@@ -75,9 +75,18 @@ Test gates: contracts → `cargo test`; template/dashboard logic → unit tests
       incompatible with papi 1.23.3). deploy-contract.mjs replaces
       `playground contract deploy` for §10.3 step 4 — no ctor-arg support
       there; signer = ARCADE_SURI env, default //Alice.)
-- [ ] 9. Template agent instructions (`CLAUDE.md`/`AGENTS.md` per §10.4).
-- [ ] 10. Playwright: guest plays Snake → game over → save-score prompt
+- [x] 9. Template agent instructions (`CLAUDE.md`/`AGENTS.md` per §10.4).
+      (Full runbook in CLAUDE.md; README/modding.md/quests/setup.sh purged of
+      burner-model references.)
+- [x] 10. Playwright: guest plays Snake → game over → save-score prompt
       appears; sign-in path submits (host mocked via test SDK).
+      (5/5 e2e green. Fake gateway behind VITE_ARCADE_FAKE_GATEWAY in the
+      composition root; deterministic __snakeForceGameOver test hook.)
+- [ ] 10b. HARDENING (from live item-6 bug): post-publish asset verification —
+      after `playground deploy`, fetch every dist file from the live
+      subdomain and fail on any non-200 (the Bulletin upload silently
+      dropped an async chunk → "product-sdk import failed" on sign-in).
+      Fold into verify-listing.mjs or a new arcade:verify-frontend script.
 
 ## Phase 4 — Dashboard (SPEC §7)
 
