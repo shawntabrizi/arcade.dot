@@ -606,20 +606,22 @@ Activity rendering and leaderboard rendering MUST be separate components
 
 ### 7.5 Launching games [MVP]
 
-The Play button opens the game's `playUrl` — ideally a `.dot` name — **as a
-new dApp within the host environment**, not an external browser tab.
+The Play button opens the game's `playUrl` as a new dApp with its own host
+context. **Validated on the dot.li web host** (see BUILD_PLAN.md spike
+results, 2026-06-06):
 
-- The host-api does not currently expose an explicit "open dApp" call;
-  hosts intercept navigation to `.dot`/dApp URLs and open them in-host. The
-  dashboard therefore renders Play as standard navigation to `playUrl`, and
-  MUST adopt the host's app-launch API if/when one ships.
-- ⚠ **Integration risk — validate in week 1:** confirm with a real Triangle
-  host that navigating from one embedded dApp to a `.dot` URL opens the
-  target dApp. If it does not, the conference fallback is opening the game
-  in a new tab/window.
-- Outside a host (plain browser), Play opens `playUrl` directly; for a
-  `.dot` name, the dashboard rewrites it to its public gateway form
-  (`https://<label>.dot.li`).
+- The launch mechanism is a plain anchor:
+  `<a href="https://<label>.dot.li" target="_blank" rel="noopener">`. The
+  target page boots its own host shell, so the game opens fully hosted.
+- Same-frame navigation (`location.href`, plain `<a>`) and `window.open`
+  are **blocked** by the app iframe's sandbox/CSP — the dashboard MUST NOT
+  use them for Play.
+- This works identically in a plain browser (the `.dot.li` shell auto-boots
+  either way), so no in-host/out-of-host branching is needed. For a
+  `playUrl` stored as a bare `.dot` name, the dashboard rewrites it to
+  `https://<label>.dot.li`.
+- The dashboard SHOULD adopt an explicit host app-launch API if one ships.
+  Mobile-host behavior: assumed identical, pending a device check.
 
 ### 7.6 Visual direction [MVP]
 

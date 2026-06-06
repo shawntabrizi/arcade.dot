@@ -45,16 +45,25 @@ Test gates: contracts → `cargo test`; template/dashboard logic → unit tests
 
 ## Phase 2 — Integration risk spikes (SPEC §2.3) — run early, results recorded here
 
-- [ ] 5. Validate in-host dApp→dApp `.dot` navigation; record outcome + chosen
+- [x] 5. Validate in-host dApp→dApp `.dot` navigation; record outcome + chosen
       fallback in this file under "Spike results".
+      (Web host validated via spikes/nav-spike. Mobile-host check still
+      pending with user — low risk, same pattern expected.)
 - [ ] 6. Validate host-wallet signing round-trip from a game
       (SignerManager → ensureAccountMapped → submitScore) on paseo-next-v2.
+      ⚠ BLOCKED on user: needs the mobile app against a deployed test game.
+      Item 7's reworked template will be the test vehicle.
 
 ## Phase 3 — Game template (SPEC §8, §10)
 
-- [ ] 7. Rework identity: remove burner/faucet machinery; product-sdk
+- [x] 7. Rework identity: remove burner/faucet machinery; product-sdk
       SignerManager; guest mode (zero chain) + game-over "sign in to save your
       score" flow (§8.3); unit tests for the scoreboard layer.
+      (16 tests + build green. Burner/arcade/faucet code deleted; pure policy
+      in scoreboard.ts behind a ChainGateway seam; real SDK wiring isolated
+      in sdk-gateway.ts with a ⚠ TODO for the item-6 in-host validation.
+      SDK pinned to signer 0.6.0 / tx 0.2.7 — npm registry date cutoff blocks
+      newer; bump later. cdm.json repointed at the new GCS contract.)
 - [ ] 8. `arcade.config.json` + pipeline scripts (§10.3 steps 5/7/8): thumbnail
       upload → CID, `updateListing` registration, verify script — all
       non-interactive, exiting non-zero with actionable messages.
@@ -84,4 +93,29 @@ Test gates: contracts → `cargo test`; template/dashboard logic → unit tests
 
 ## Spike results
 
-(filled in by items 5–6)
+### Item 5 — dApp→dApp navigation (web host, 2026-06-06)
+
+Tested via `spikes/nav-spike` (deployed: arcade-nav-spike.dot.li, headless
+Chromium driving the dot.li web host). Architecture observed: `<label>.dot.li`
+serves a host shell; the app runs sandboxed in an iframe at
+`<label>.app.dot.li`; a host bridge iframe runs at
+`host.dot.li?mode=shared-worker&network=paseo-next-v2`.
+
+| Variant | Result |
+|---|---|
+| `<a target="_blank">` → `https://<label>.dot.li` | ✅ opens target app in a new page with its own host shell — **the launch pattern** |
+| same-frame `<a>` / `location.href` (gateway or bare .dot) | ❌ blocked (iframe sandbox/CSP → chrome-error) |
+| `window.open(...)` | ❌ popup blocked |
+| `dot://` custom scheme | ❌ dead |
+
+Dashboard Play button therefore: plain anchor, `target="_blank" rel="noopener"`,
+href `https://<label>.dot.li`. Works identically in plain browser (shell
+auto-boots). Mobile host: pending user check.
+
+### Item 6 — host-wallet signing round-trip
+
+Pending. Item 7 flagged what it must confirm: (1) `connect("host")` returns a
+usable signer in-host; (2) the H160 the contract sees as `caller()` ==
+sdk-ink's `ss58ToEthereum(account.address)` (NOT `SignerAccount.h160`, which
+is keccak-derived and differs — template uses the former); (3) map_account +
+submitScore survive the host's signed-extensions path.
