@@ -16,23 +16,42 @@ The smart contract source is at `contracts/leaderboard/lib.rs`. It stores `best[
 
 The two interfaces — `GameComponentProps` and `ScoreboardAPI` — are the seams. Anything implementing one is a drop-in.
 
-## Identity model
+## Identity model (SPEC §8)
 
-The contract is keyed by `pvm::caller()` — the H160 the runtime maps the substrate signer to. Each browser holds its own **burner wallet** (sr25519 mnemonic in localStorage, see `src/scoreboard/signer.ts`), which is what signs `submit_score`. So each browser shows up as a distinct H160 on the leaderboard.
+A player is their **host wallet account** — the Polkadot account from the host
+environment, exposed via product-sdk's `SignerManager` (host provider, NOT
+per-app product accounts). The burner-wallet + `//Alice` faucet machinery has
+been **removed entirely** (SPEC §8.1).
 
-A fresh burner has no balance and isn't registered with `pallet_revive`, so on first submit `src/scoreboard/bootstrap.ts` runs a one-time setup using `//Alice` as a faucet:
+The flow lives in the scoreboard layer:
 
-1. `//Alice` calls `Balances.transfer_keep_alive` to fund the burner.
-2. The burner calls `Revive.map_account()` to register itself as a caller.
-3. The burner can now sign `submit_score(score)` on its own.
+- **Guest mode (default) = zero chain interaction.** No account, no funding, no
+  mapping. The game runs; a score worth keeping is held in `localStorage`
+  (`src/scoreboard/scoreboard.ts`) so it survives the session.
+- **At game over**, a guest who beat their locally-known best is prompted:
+  *"Sign in to save your score"*. Accepting runs, once:
+  `SignerManager.connect("host")` → `ensureAccountMapped` (product-sdk-tx,
+  idempotent `pallet_revive` mapping) → `submitScore` via `submitAndWatch` at
+  best-block.
+- **Signed-in players** submit directly at game over (every play counts; a
+  non-improving `submitScore` never reverts — SPEC §4.2).
+- **`requiresAccount`** (a template config switch in `App.tsx`) gates sign-in at
+  launch instead of at game over (SPEC §8.3).
 
-Trade-offs in this setup:
+The single chain seam is `ChainGateway` (`src/scoreboard/gateway.ts`). The real
+product-sdk wiring is isolated in `src/scoreboard/sdk-gateway.ts`; unit tests
+inject a fake gateway and never import the SDK. The pure policy
+(`scoreboard.ts`) is what the tests target.
 
-- Zero player-side auth UX (no extension, no manual faucet) — runs out of the box.
-- `//Alice` is still in the codebase, but only as the shared faucet. Real submissions are signed by the player's own burner.
-- A future PR adds a singleton "Arcade" registry contract that aggregates scores across games — see `docs/modding.md`.
+Display names are NOT the template's concern — the dashboard resolves DotNS
+reverse names (SPEC §8.2). In-game the board shows truncated H160 addresses.
 
-Don't reintroduce display-name identity, `//Alice` as the submission signer, or anonymous spoofable IDs without surfacing the trade-off.
+Don't reintroduce burner keys, a faucet, `//Alice` as a signer, or display-name
+identity — all removed per SPEC §8.
+
+> ⚠ The full SignerManager → ensureAccountMapped → submitScore round-trip must
+> be validated inside a real Triangle host on paseo-next-v2 (BUILD_PLAN item 6).
+> `sdk-gateway.ts` is assembled to the §8.1 contract but unverified in-host.
 
 ## When the user wants to swap something
 
@@ -49,10 +68,10 @@ Don't reinvent the recipes here — the doc is the source of truth for users *an
 
 - Don't import `src/scoreboard/` from inside a game. The whole point of the architecture is that games are storage-agnostic.
 - Don't read or write `localStorage` for score data from inside a game.
-- Writes resolve at **best-block inclusion**, not finalization, for latency (`src/scoreboard/tx.ts`). This deliberately trades finality durability for speed — fine for a game; the tx still finalizes. Reads use a best-block ink SDK (`inkSdkBest` in `cdm.ts`) so they stay coherent with just-included writes. Don't switch writes back to `signAndSubmit` (finalization) without surfacing the latency cost; don't read at finalized while writing at best-block (you'll get stale reads / `AccountUnmapped`).
-- The leaderboard updates optimistically on submit and reconciles on refresh. The burner fund + `map_account` runs eagerly on load, off the submit path; the arcade `record_score` sync is fire-and-forget. Keep these off the perceived latency path.
-- The default backend is the contract. Don't switch the default to `localScoreboard` without asking — the on-chain story is the architectural point of this template.
-- Don't bypass the contract by writing scores directly to localStorage when the contract is unavailable. The current behavior (banner + disabled submission) is intentional — it surfaces the deploy step rather than papering over it.
+- Writes resolve at **best-block inclusion**, not finalization, for latency (`submitAndWatch(..., { waitFor: "best-block" })` in `src/scoreboard/sdk-gateway.ts`). This trades finality durability for speed — fine for a game; the tx still finalizes. Reads use a best-block ink SDK (`inkSdkBest` in `gcs.ts`) so they stay coherent with just-included writes. Don't read at finalized while writing at best-block (you'll get stale reads / `AccountUnmapped`).
+- The leaderboard updates optimistically on submit and reconciles on refresh. `ensureAccountMapped` runs as part of the submit funnel (idempotent — short-circuits when already mapped). Keep it off the perceived latency path.
+- The default read backend is the GCS contract (`reads.ts`). `localScoreboard`/`createLocalGateway` (`local-impl.ts`) is the play-fully-offline fallback — don't make it the default without asking; the on-chain story is the architectural point.
+- The one game contract the template talks to is `@arcade/gcs-reference` (SPEC §4.6). The old leaderboard/arcade contracts and the fire-and-forget `record_score` are gone.
 
 ## Files that follow the playground registry convention
 
@@ -60,14 +79,11 @@ Don't reinvent the recipes here — the doc is the source of truth for users *an
 - `quests.json` — mod ideas surfaced on the App Detail Page
 - `setup.sh` — runs after `dot mod` clones the repo
 
-## Contract changes
+## Contract
 
-Contract source: `contracts/leaderboard/lib.rs`. After any contract change:
-
-```bash
-dot deploy --contracts
-```
-
-This rebuilds and redeploys the contract, then rewrites `cdm.json` with the new address and ABI. Restart `npm run dev` to pick up the change.
-
-`cdm` is still in the loop structurally — `dot --contracts` wraps `cdm build` + `cdm deploy` + `cdm install`, and the frontend uses `@dotdm/cdm` at runtime. We just don't surface `cdm` commands in user docs.
+The template ships the canonical GCS v1 reference contract (SPEC §4.6); the dev
+deploys it unmodified. Its ABI is identical for every conforming game, so the
+frontend reads `cdm.json` for the deployed address + ABI of
+`@arcade/gcs-reference` and talks to it via `@polkadot-api/sdk-ink` at runtime
+(`src/scoreboard/gcs.ts`). The deploy/registration pipeline that writes
+`cdm.json` is BUILD_PLAN item 8.

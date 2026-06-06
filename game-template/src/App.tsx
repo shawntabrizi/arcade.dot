@@ -1,202 +1,220 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { SnakeGame } from "./games/snake/SnakeGame";
 import type { ScoreEntry } from "./scoreboard/api";
 import { Leaderboard, shortAddress } from "./scoreboard/Leaderboard";
-import {
-  contractScoreboard,
-  getBurnerH160,
-  getBurnerSs58,
-  isLeaderboardContractDeployed,
-} from "./scoreboard/contract-impl";
-import { ensureBurnerReady } from "./scoreboard/bootstrap";
-import { getCdm, inkSdkBest } from "./scoreboard/cdm";
-import { getBurnerSigner } from "./scoreboard/signer";
-import {
-  getDisplayName,
-  isArcadeInstalled,
-  setDisplayName as arcadeSetDisplayName,
-} from "./scoreboard/arcade";
+import { contractScoreboard, isContractDeployed } from "./scoreboard/reads";
+import { Scoreboard, type GameOverOutcome } from "./scoreboard/scoreboard";
+import { createSdkGateway } from "./scoreboard/sdk-gateway";
+import { getGcsAddress } from "./scoreboard/gcs";
+
+// ── Template configuration (SPEC §8.3 / §10.4) ──────────────────────────────
+// Flip to true for multiplayer / on-chain-state games that cannot be played as
+// a guest: sign-in is then required at launch instead of at game over. The
+// dashboard badges this from the on-chain `requiresAccount` listing flag.
+const REQUIRES_ACCOUNT = false;
 
 const SCOREBOARD = contractScoreboard;
-const CONTRACT_DEPLOYED = isLeaderboardContractDeployed();
-const ARCADE_DEPLOYED = isArcadeInstalled();
-const NAME_KEY = "leaderboard-playground:display-name";
+const CONTRACT_DEPLOYED = isContractDeployed();
+// Guest scores survive the session keyed per game; the GCS address is a stable
+// per-game key on this origin.
+const GAME_KEY = getGcsAddress() ?? "local";
 
-type NameState = "idle" | "saving" | "saved" | "error";
+type Phase = "playing" | "prompt" | "submitting" | "submitted" | "error";
 
 export function App() {
-  const burnerH160 = getBurnerH160();
-  const burnerSs58 = getBurnerSs58();
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastScore, setLastScore] = useState<number | null>(null);
-  const [submitState, setSubmitState] = useState<"idle" | "submitting" | "error">("idle");
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [phase, setPhase] = useState<Phase>("playing");
+  const [error, setError] = useState<string | null>(null);
+  const [player, setPlayer] = useState<`0x${string}` | null>(null);
   // Optimistic: the player's just-played score, shown on the board immediately
-  // and reconciled when the real submit lands.
+  // and reconciled when the real submit lands. Only set once submitted.
   const [pendingEntry, setPendingEntry] = useState<ScoreEntry | null>(null);
-  const [nameInput, setNameInput] = useState(() => localStorage.getItem(NAME_KEY) ?? "");
-  const [savedName, setSavedName] = useState(() => localStorage.getItem(NAME_KEY) ?? "");
-  const [nameState, setNameState] = useState<NameState>("idle");
-  const [nameError, setNameError] = useState<string | null>(null);
 
-  // Pick up the existing on-chain name on first load if the user has played
-  // from this browser before but cleared localStorage.
-  useEffect(() => {
-    if (!ARCADE_DEPLOYED || savedName) return;
-    let cancelled = false;
-    (async () => {
-      const onchain = await getDisplayName(burnerH160);
-      if (cancelled || !onchain) return;
-      setSavedName(onchain);
-      setNameInput(onchain);
-      localStorage.setItem(NAME_KEY, onchain);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [burnerH160, savedName]);
+  // One Scoreboard for the session, over the real product-sdk gateway. The
+  // gateway is the only thing that touches the chain (SPEC §8.1).
+  const scoreboard = useMemo(
+    () =>
+      new Scoreboard(createSdkGateway(), globalThis.localStorage, {
+        gameKey: GAME_KEY,
+        requiresAccount: REQUIRES_ACCOUNT,
+      }),
+    [],
+  );
 
-  // Eagerly fund + map the burner in the background on load, so the two
-  // bootstrap txs are done (or in flight) by the time the player finishes a
-  // round — keeping them off the perceived submit path. Idempotent + cached.
-  useEffect(() => {
-    if (!CONTRACT_DEPLOYED) return;
-    const c = getCdm();
-    ensureBurnerReady(c.client, inkSdkBest(), {
-      signer: getBurnerSigner(),
-      ss58: burnerSs58,
-    }).catch(() => {
-      /* errors surface on the actual submit */
-    });
-  }, [burnerSs58]);
+  // SPEC §8.3: requiresAccount games gate sign-in at LAUNCH (before play),
+  // not at game over. Guest-mode games never gate. `gated` clears once a host
+  // wallet account is connected.
+  const [gated, setGated] = useState(() => CONTRACT_DEPLOYED && scoreboard.gatesAtLaunch());
 
-  const saveName = useCallback(async () => {
-    const trimmed = nameInput.trim();
-    if (!trimmed || trimmed === savedName) return;
-    if (!ARCADE_DEPLOYED) {
-      setNameError("Arcade not deployed — names can't be saved.");
-      setNameState("error");
-      return;
-    }
-    setNameState("saving");
-    setNameError(null);
+  const signInAtLaunch = useCallback(async () => {
+    setError(null);
     try {
-      const c = getCdm();
-      await ensureBurnerReady(c.client, inkSdkBest(), {
-        signer: getBurnerSigner(),
-        ss58: burnerSs58,
-      });
-      await arcadeSetDisplayName(trimmed);
-      localStorage.setItem(NAME_KEY, trimmed);
-      setSavedName(trimmed);
-      setNameState("saved");
-      setRefreshKey((k) => k + 1);
+      const me = await scoreboard.signIn();
+      setPlayer(me);
+      setGated(false);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setNameError(/taken/i.test(msg) ? "Name already taken — try another." : msg);
-      setNameState("error");
+      setError(err instanceof Error ? err.message : String(err));
     }
-  }, [nameInput, savedName, burnerSs58]);
+  }, [scoreboard]);
 
+  // Place the just-played score on the board for whoever is signed in.
+  const showOptimistic = useCallback(
+    (score: number) => {
+      const p = scoreboard.currentPlayer();
+      if (p) {
+        setPlayer(p);
+        setPendingEntry({ player: p, score, timestamp: Math.floor(Date.now() / 1000) });
+      }
+    },
+    [scoreboard],
+  );
+
+  // The game calls this exactly once per match (SPEC §10.4 — Snake's own
+  // `ended` guard enforces it), so a single onGameEnd drives at most one submit.
   const onGameEnd = useCallback(
     async (score: number) => {
       setLastScore(score);
-      if (!CONTRACT_DEPLOYED) return;
-      setSubmitState("submitting");
-      setSubmitError(null);
-      // Optimistically place the score on the board right away; the real submit
-      // (and refresh) reconciles it a moment later.
-      setPendingEntry({ player: burnerH160, score, timestamp: Date.now() });
+      setError(null);
+      if (!CONTRACT_DEPLOYED) {
+        setPhase("playing");
+        return;
+      }
       try {
-        await SCOREBOARD.submitScore(score);
-        setRefreshKey((k) => k + 1);
-        setSubmitState("idle");
+        const outcome: GameOverOutcome = await scoreboard.onGameEnd(score);
+        switch (outcome.kind) {
+          case "submitted": // signed-in: submitted directly, no prompt
+            showOptimistic(score);
+            setPhase("submitted");
+            setRefreshKey((k) => k + 1);
+            break;
+          case "prompt": // guest, worth keeping → "sign in to save your score"
+            setPhase("prompt");
+            break;
+          case "ignored":
+            setPhase("playing");
+            break;
+        }
       } catch (err) {
-        setSubmitError(err instanceof Error ? err.message : String(err));
-        setSubmitState("error");
-        setPendingEntry(null); // roll back the optimistic entry on failure
+        setError(err instanceof Error ? err.message : String(err));
+        setPhase("error");
       }
     },
-    [burnerH160],
+    [showOptimistic, scoreboard],
   );
 
-  const nameStatus =
-    nameState === "saving"
-      ? "saving…"
-      : nameState === "error"
-        ? nameError
-        : nameState === "saved" || savedName
-          ? ""
-          : "Pick a name so others can see who you are.";
+  // SPEC §8.3: the conversion moment — connect host wallet → ensureAccountMapped
+  // → submitScore the held score. One flow, inherited by every template game.
+  const saveScore = useCallback(async () => {
+    setPhase("submitting");
+    setError(null);
+    try {
+      await scoreboard.saveHeldScore();
+      if (lastScore !== null) showOptimistic(lastScore);
+      setPhase("submitted");
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setPhase("error");
+    }
+  }, [scoreboard, lastScore, showOptimistic]);
+
+  // Dismiss the prompt / banner and return to play (Snake replays in place).
+  const onRestart = useCallback(() => {
+    setPhase("playing");
+  }, []);
 
   return (
     <div className="page">
       <header className="page-header">
-        <h1>Leaderboard Playground</h1>
-        <p className="tagline">A starter template — swap the game, keep the on-chain scoreboard.</p>
+        <h1>Arcade Game Template</h1>
+        <p className="tagline">
+          Play as a guest — sign in only to save a score worth keeping.
+        </p>
       </header>
 
       {!CONTRACT_DEPLOYED && (
         <div className="banner banner-warn">
-          <strong>Contract not deployed.</strong> Scores can&rsquo;t be saved yet. Run{" "}
-          <code>dot deploy --contracts</code>, then restart the dev server. See <code>README.md</code> for the full first-run flow.
+          <strong>Game contract not deployed.</strong> Scores can&rsquo;t be saved on-chain yet.
+          Run the deploy pipeline (see <code>README.md</code>), then restart the dev server.
         </div>
       )}
 
-      <div className="player-row">
-        <label htmlFor="display-name">You</label>
-        <input
-          id="display-name"
-          type="text"
-          placeholder="display name (e.g. alice)"
-          value={nameInput}
-          onChange={(e) => {
-            setNameInput(e.target.value);
-            if (nameState !== "idle") setNameState("idle");
-          }}
-          onBlur={saveName}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-          }}
-          maxLength={32}
-          disabled={!ARCADE_DEPLOYED}
-        />
-        <code className="player-addr" title={burnerSs58}>
-          {shortAddress(burnerH160)}
-        </code>
-        <span className="player-hint">
-          {nameStatus ||
-            "On first save your burner wallet is funded by the configured faucet and registered with pallet_revive — expect ~30s."}
-        </span>
-      </div>
-
-      <div className="layout">
+      {gated ? (
+        <div className="layout">
+          <section className="game-col">
+            <div className="save-prompt">
+              <p>This game requires an account</p>
+              <button type="button" onClick={signInAtLaunch}>
+                Sign in with your host wallet
+              </button>
+              {error && <p className="submit-error">Couldn&rsquo;t sign in: {error}</p>}
+            </div>
+          </section>
+        </div>
+      ) : (
+        <div className="layout">
         <section className="game-col">
           <SnakeGame onGameEnd={onGameEnd} />
           {lastScore !== null && (
             <p className="last-score">
               Last score: <strong>{lastScore}</strong>
-              {submitState === "submitting" && " · submitting…"}
+              {phase === "submitting" && " · saving…"}
+              {phase === "submitted" && " · saved"}
               {!CONTRACT_DEPLOYED && " · contract not deployed"}
             </p>
           )}
-          {submitError && <p className="submit-error">Submit failed: {submitError}</p>}
+
+          {phase === "prompt" && (
+            <div className="save-prompt">
+              <p>Sign in to save your score</p>
+              <button type="button" onClick={saveScore}>
+                Sign in &amp; save
+              </button>
+              <button type="button" className="ghost" onClick={onRestart}>
+                Keep playing as guest
+              </button>
+            </div>
+          )}
+
+          {phase === "submitted" && (
+            <p className="last-score">
+              {player && (
+                <>
+                  Saved as <code title={player}>{shortAddress(player)}</code>.{" "}
+                </>
+              )}
+              <button type="button" className="ghost" onClick={onRestart}>
+                Play again
+              </button>
+            </p>
+          )}
+
+          {phase === "error" && error && (
+            <p className="submit-error">
+              Couldn&rsquo;t save: {error}{" "}
+              <button type="button" className="ghost" onClick={onRestart}>
+                Dismiss
+              </button>
+            </p>
+          )}
         </section>
 
         <section className="board-col">
           <Leaderboard
             api={SCOREBOARD}
             refreshKey={refreshKey}
-            highlightPlayer={burnerH160}
+            highlightPlayer={player ?? undefined}
             pendingEntry={pendingEntry}
           />
         </section>
       </div>
+      )}
 
       <footer className="page-footer">
         <p>
-          Polkadot Playground starter template. See <code>README.md</code> to deploy your contract,
-          and <code>docs/modding.md</code> to swap the game or change the storage backend.
+          Polkadot Arcade game template. See <code>README.md</code> to deploy and register your
+          game, and <code>docs/modding.md</code> to swap the game.
         </p>
       </footer>
     </div>

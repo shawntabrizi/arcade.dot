@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Arcade Nav Spike</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; background: #111; color: #eee;
+           margin: 0; padding: 24px; }
+    h1 { font-size: 18px; } p { color: #aaa; font-size: 14px; }
+    .btn { display: block; width: 100%; box-sizing: border-box; margin: 10px 0; padding: 14px;
+           font-size: 15px; border-radius: 10px; border: none; background: #2a2a2e; color: #fff;
+           text-align: left; text-decoration: none; cursor: pointer; }
+    .btn b { color: #ff5fa2; margin-right: 8px; }
+    #log { margin-top: 16px; font-size: 12px; color: #6f6; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>Arcade dApp→dApp navigation spike (SPEC §2.3 #1)</h1>
+  <p>Tap each button inside the Polkadot host. For each, note what happens:
+     opens in-host as a new dApp / replaces this dApp / opens external browser /
+     nothing. Target app: <code>rockpaperscissors.dot</code>.</p>
+
+  <a class="btn" href="https://rockpaperscissors.dot.li"><b>A</b> &lt;a href="https://rockpaperscissors.dot.li"&gt; (same frame)</a>
+  <a class="btn" href="https://rockpaperscissors.dot.li" target="_blank" rel="noopener"><b>B</b> &lt;a target="_blank"&gt; gateway URL</a>
+  <a class="btn" href="https://rockpaperscissors.dot"><b>C</b> &lt;a href="https://rockpaperscissors.dot"&gt; (bare .dot host)</a>
+  <button class="btn" onclick="log('D'); window.location.href='https://rockpaperscissors.dot.li'"><b>D</b> window.location.href = gateway URL</button>
+  <button class="btn" onclick="log('E'); window.open('https://rockpaperscissors.dot.li','_blank')"><b>E</b> window.open(gateway URL)</button>
+  <button class="btn" onclick="log('F'); window.location.href='dot://rockpaperscissors.dot'"><b>F</b> window.location.href = "dot://…" (custom scheme)</button>
+
+  <div id="log"></div>
+  <script>
+    function log(k){ document.getElementById('log').textContent += 'tapped ' + k + '\n'; }
+    document.getElementById('log').textContent =
+      'inIframe=' + (window.self !== window.top) + '\n';
+  </script>
+</body>
+</html>

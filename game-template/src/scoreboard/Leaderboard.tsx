@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ScoreboardAPI, ScoreEntry } from "./api";
-import { isArcadeInstalled, resolveDisplayNames } from "./arcade";
 
 interface Props {
   api: ScoreboardAPI;
@@ -66,7 +65,6 @@ export function Leaderboard({
 }: Props) {
   const [scores, setScores] = useState<ScoreEntry[]>([]);
   const [recent, setRecent] = useState<ScoreEntry[]>([]);
-  const [names, setNames] = useState<Map<string, string | null>>(new Map());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -81,16 +79,6 @@ export function Leaderboard({
       setScores(top);
       setRecent(recentScores);
       setLoading(false);
-      if (isArcadeInstalled()) {
-        const players = [...top, ...recentScores].map((e) => e.player);
-        if (players.length > 0) {
-          const resolved = await resolveDisplayNames(players);
-          if (cancelled) return;
-          const next = new Map<string, string | null>();
-          resolved.forEach((v, k) => next.set(k.toLowerCase(), v));
-          setNames(next);
-        }
-      }
     })();
     return () => {
       cancelled = true;
@@ -105,7 +93,9 @@ export function Leaderboard({
     () => withPendingRecent(recent, pendingEntry, limit),
     [recent, pendingEntry, limit],
   );
-  const label = (addr: string) => names.get(addr.toLowerCase()) || shortAddress(addr);
+  // SPEC §8.2: the template has no name infrastructure of its own — the
+  // dashboard resolves DotNS names. In-game we show truncated addresses.
+  const label = (addr: string) => shortAddress(addr);
 
   return (
     <div className="leaderboard">

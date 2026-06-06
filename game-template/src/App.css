@@ -120,6 +120,9 @@ body {
   border-radius: 8px;
   font-size: 13px;
   line-height: 1.5;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #c7cad1;
 }
 
 .banner code {
@@ -141,6 +144,57 @@ body {
   color: #e88a8a;
   max-width: 360px;
   word-break: break-word;
+}
+
+/* SPEC §8.3: the "sign in to save your score" nudge, shown to a guest at game
+   over when their score is worth keeping. */
+.save-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 360px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(230, 0, 122, 0.1);
+  border: 1px solid rgba(230, 0, 122, 0.4);
+}
+
+.save-prompt p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #f0e8ee;
+}
+
+.save-prompt button,
+button.ghost {
+  font: inherit;
+  cursor: pointer;
+}
+
+.save-prompt button {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: none;
+  background: #e6007a;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+button.ghost {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: #a0a3aa;
+  font-size: 12px;
+}
+
+button.ghost:hover {
+  color: #e8e8ec;
+  border-color: rgba(255, 255, 255, 0.35);
 }
 
 .board-col {

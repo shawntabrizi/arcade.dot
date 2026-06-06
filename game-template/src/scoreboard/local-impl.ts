@@ -1,7 +1,12 @@
-import type { ScoreboardAPI, ScoreEntry } from "./api";
-import { getBurnerH160 } from "./signer";
+import type { ScoreboardAPI, ScoreEntry, ScoreOrdering } from "./api";
+import type { ChainGateway } from "./gateway";
 
-const STORAGE_KEY = "leaderboard-playground:scores";
+// Local-only fallback (SPEC §10.4 "play fully offline"): no chain, no signer,
+// no account. Scores live in localStorage so the in-game board still works with
+// no contract deployed and no host. A deterministic local H160 stands in for
+// the player so the board can highlight "you".
+const STORAGE_KEY = "arcade:local-scores";
+const LOCAL_PLAYER = "0x0000000000000000000000000000000000l0ca1" as `0x${string}`;
 const MAX_ENTRIES = 100;
 
 function read(): ScoreEntry[] {
@@ -19,15 +24,13 @@ function write(entries: ScoreEntry[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
 }
 
-export const localScoreboard: ScoreboardAPI = {
-  async submitScore(score) {
-    // Keep entries in submission order (newest last); getTopScores sorts on
-    // read. One log serves both "top" and "recent".
-    const entries = read();
-    entries.push({ player: getBurnerH160(), score, timestamp: Date.now() });
-    write(entries.slice(-MAX_ENTRIES));
-  },
+function append(score: number): void {
+  const entries = read();
+  entries.push({ player: LOCAL_PLAYER, score, timestamp: Math.floor(Date.now() / 1000) });
+  write(entries.slice(-MAX_ENTRIES));
+}
 
+export const localScoreboard: ScoreboardAPI = {
   async getTopScores(limit = 10) {
     return read()
       .slice()
@@ -40,9 +43,43 @@ export const localScoreboard: ScoreboardAPI = {
   },
 
   async getPlayerBest(player) {
-    const personalBests = read()
-      .filter((e) => e.player === player)
+    const bests = read()
+      .filter((e) => e.player.toLowerCase() === player.toLowerCase())
       .map((e) => e.score);
-    return personalBests.length === 0 ? null : Math.max(...personalBests);
+    return bests.length === 0 ? null : Math.max(...bests);
   },
 };
+
+// A ChainGateway that writes to localStorage instead of a chain — drop-in for
+// the Scoreboard when playing fully offline. "Sign in" is a no-op that adopts
+// the local player; submit appends to the local log.
+export function createLocalGateway(ordering: ScoreOrdering = 0): ChainGateway {
+  let connected = false;
+  return {
+    async scoreOrdering() {
+      return ordering;
+    },
+    currentPlayer() {
+      return connected ? LOCAL_PLAYER : null;
+    },
+    async connect() {
+      connected = true;
+      return LOCAL_PLAYER;
+    },
+    async ensureMapped() {
+      /* no chain to map against */
+    },
+    async submitScore(score) {
+      append(score);
+    },
+    async getLeaderboard(_offset, limit) {
+      return localScoreboard.getTopScores(limit) as Promise<ScoreEntry[]>;
+    },
+    async getRecent(_offset, limit) {
+      return localScoreboard.getRecentScores(limit) as Promise<ScoreEntry[]>;
+    },
+    async getBest(player) {
+      return localScoreboard.getPlayerBest(player);
+    },
+  };
+}
