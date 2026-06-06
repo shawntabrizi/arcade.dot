@@ -1,0 +1,23 @@
+[package]
+name = "gcs-reference"
+version.workspace = true
+edition.workspace = true
+description = "Game Contract Standard (GCS) v1 reference implementation (SPEC §4). Scaffold — see lib.rs TODO."
+
+# CDM package identity — required by `dot contract deploy` (v0.27+) detection.
+[package.metadata.cdm]
+package = "@arcade/gcs-reference"
+
+[lib]
+path = "lib.rs"
+
+[[bin]]
+name = "gcs-reference"
+path = "lib.rs"
+
+[dependencies]
+cdm = { workspace = true }
+pvm_contract = { workspace = true }
+polkavm-derive = { workspace = true }
+parity-scale-codec = { workspace = true }
+picoalloc = { workspace = true }

@@ -1,0 +1,23 @@
+[package]
+name = "registry"
+version.workspace = true
+edition.workspace = true
+description = "Arcade Registry — permissionless directory of arcade-compatible game contracts (SPEC §5)."
+
+# CDM package identity — required by `dot contract deploy` (v0.27+) detection.
+[package.metadata.cdm]
+package = "@arcade/registry"
+
+[lib]
+path = "lib.rs"
+
+[[bin]]
+name = "registry"
+path = "lib.rs"
+
+[dependencies]
+cdm = { workspace = true }
+pvm_contract = { workspace = true }
+polkavm-derive = { workspace = true }
+parity-scale-codec = { workspace = true }
+picoalloc = { workspace = true }

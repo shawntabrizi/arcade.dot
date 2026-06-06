@@ -1,0 +1,17 @@
+# NOTE: unlike the prototype's `.cargo/config.toml`, this file does NOT set a
+# default `[build] target` or `[unstable] build-std`. The PolkaVM build is done
+# via `cargo pvm-contract build`, which supplies the riscv target spec and
+# `-Zbuild-std=core,alloc` itself (see cargo-pvm-contract-builder). Pinning them
+# here as defaults would also force them onto `cargo test`, which builds for the
+# host — producing a second copy of core/alloc and "duplicate lang item" errors.
+# Keeping them out lets both commands work: `cargo pvm-contract build` for the
+# on-chain artifact, plain `cargo test` for the host unit tests.
+
+# `cargo pvm-contract build` passes the riscv `.json` target spec; that requires
+# this unstable flag. It is inert for the host `cargo test` build (which uses a
+# named target triple, not a `.json` spec), so it is safe to leave enabled.
+[unstable]
+json-target-spec = true
+
+[env]
+RUSTC_BOOTSTRAP = "1"

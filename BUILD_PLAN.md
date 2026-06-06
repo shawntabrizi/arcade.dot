@@ -10,12 +10,17 @@ Test gates: contracts → `cargo test`; template/dashboard logic → unit tests
 
 ## Phase 1 — Contracts (SPEC §4, §5)
 
-- [ ] 1. Contracts workspace: `contracts/registry` + `contracts/gcs-reference`
+- [x] 1. Contracts workspace: `contracts/registry` + `contracts/gcs-reference`
       (ink! on PolkaVM via `pvm_contract`, modeled on the prototype's toolchain),
       both compiling clean.
-- [ ] 2. Arcade Registry per §5, with unit tests: caller-keyed register/update,
+- [x] 2. Arcade Registry per §5, with unit tests: caller-keyed register/update,
       unlist, length-cap reverts, enumeration + pagination edges (§4.3),
       `ListingChanged` event, `metaVersion`/timestamps stamping.
+      (18 tests green. Notes: events emitted manually via deposit_event with
+      keccak topic — pvm_contract macro lacks event support, so events are NOT
+      in the generated ABI JSON; dashboard must subscribe by topic hash.
+      contracts/.cargo/config.toml deliberately drops the prototype's default
+      riscv target so `cargo test` and `cargo pvm-contract build` coexist.)
 - [ ] 3. GCS v1 reference contract per §4, with unit tests: submitScore
       semantics (non-improving never reverts, counters always move), both
       score orderings, u128::MAX sentinel rule, top-100 insert/update/evict,
