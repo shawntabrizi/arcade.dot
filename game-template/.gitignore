@@ -8,3 +8,7 @@ target
 .env.local
 .cdm/
 tsconfig.tsbuildinfo
+# Pipeline scratchpad written by the deploy scripts (SPEC §10.3 step 5).
+.arcade-pipeline.json
+# Temp runner copy used by contracts/scripts/run-deploy.sh.
+.deploy-runner.mjs

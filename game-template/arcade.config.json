@@ -1,0 +1,13 @@
+{
+  "name": "Snake",
+  "gameType": "arcade",
+  "shortDescription": "Classic Snake. Eat, grow, don't bite your tail. Each apple is a point — beat the leaderboard.",
+  "requiresAccount": false,
+  "thumbnail": "assets/thumbnail.png",
+  "domain": "arcade-snake",
+  "contract": {
+    "scoreOrdering": 0,
+    "scoreFormat": 0,
+    "scoreUnit": ""
+  }
+}

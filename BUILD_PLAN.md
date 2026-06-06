@@ -64,9 +64,17 @@ Test gates: contracts → `cargo test`; template/dashboard logic → unit tests
       in sdk-gateway.ts with a ⚠ TODO for the item-6 in-host validation.
       SDK pinned to signer 0.6.0 / tx 0.2.7 — npm registry date cutoff blocks
       newer; bump later. cdm.json repointed at the new GCS contract.)
-- [ ] 8. `arcade.config.json` + pipeline scripts (§10.3 steps 5/7/8): thumbnail
+- [x] 8. `arcade.config.json` + pipeline scripts (§10.3 steps 5/7/8): thumbnail
       upload → CID, `updateListing` registration, verify script — all
       non-interactive, exiting non-zero with actionable messages.
+      (35 tests + build green; proven by a LIVE run: Snake GCS instance
+      0x5d38af8b84c06d26113d94b596ccca99f2078acc registered in the registry,
+      thumbnail bafkreierhubxebvyr5vzzvhg3tl6su762laopokeuuuinpn32qli72quyy
+      fetchable from the Bulletin gateway. Bulletin upload: bulletin-deploy
+      for CID/auth helpers + own PAPI submit (its storeFile watcher is
+      incompatible with papi 1.23.3). deploy-contract.mjs replaces
+      `playground contract deploy` for §10.3 step 4 — no ctor-arg support
+      there; signer = ARCADE_SURI env, default //Alice.)
 - [ ] 9. Template agent instructions (`CLAUDE.md`/`AGENTS.md` per §10.4).
 - [ ] 10. Playwright: guest plays Snake → game over → save-score prompt
       appears; sign-in path submits (host mocked via test SDK).

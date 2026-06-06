@@ -6,12 +6,15 @@ import { contractScoreboard, isContractDeployed } from "./scoreboard/reads";
 import { Scoreboard, type GameOverOutcome } from "./scoreboard/scoreboard";
 import { createSdkGateway } from "./scoreboard/sdk-gateway";
 import { getGcsAddress } from "./scoreboard/gcs";
+import arcadeConfig from "../arcade.config.json";
 
-// ── Template configuration (SPEC §8.3 / §10.4) ──────────────────────────────
-// Flip to true for multiplayer / on-chain-state games that cannot be played as
-// a guest: sign-in is then required at launch instead of at game over. The
-// dashboard badges this from the on-chain `requiresAccount` listing flag.
-const REQUIRES_ACCOUNT = false;
+// ── Template configuration (SPEC §6.5 / §8.3 / §10.4) ───────────────────────
+// arcade.config.json is the single source of truth (SPEC §6.5). `requiresAccount`
+// here is the SAME flag the deploy pipeline writes to the on-chain listing, so
+// the in-game launch gate and the dashboard badge never disagree. Set it to true
+// for multiplayer / on-chain-state games that cannot be played as a guest:
+// sign-in is then required at launch instead of at game over (SPEC §8.3).
+const REQUIRES_ACCOUNT = arcadeConfig.requiresAccount === true;
 
 const SCOREBOARD = contractScoreboard;
 const CONTRACT_DEPLOYED = isContractDeployed();

@@ -8,7 +8,12 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run --config vitest.config.ts",
-    "test:watch": "vitest --config vitest.config.ts"
+    "test:watch": "vitest --config vitest.config.ts",
+    "arcade:deploy-contract": "node scripts/deploy-contract.mjs",
+    "arcade:upload-thumbnail": "node scripts/upload-thumbnail.mjs",
+    "arcade:register": "node scripts/register-listing.mjs",
+    "arcade:verify": "node scripts/verify-listing.mjs",
+    "arcade:ship": "node scripts/ship.mjs"
   },
   "dependencies": {
     "@parity/product-sdk-signer": "^0.6.0",
@@ -19,9 +24,13 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@polkadot-labs/hdkd": "^0.0.28",
+    "@polkadot-labs/hdkd-helpers": "^0.0.30",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "bulletin-deploy": "^0.8.3",
+    "multiformats": "^14.0.0",
     "typescript": "^5.6.3",
     "vite": "^6.0.5",
     "vitest": "^3.2.4"

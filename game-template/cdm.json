@@ -15,7 +15,7 @@
     "b7a87bf51613d89f": {
       "@arcade/gcs-reference": {
         "version": 0,
-        "address": "0x16db2b8598303758d9c37e1dae24b76b3641bf99",
+        "address": "0x5d38af8b84c06d26113d94b596ccca99f2078acc",
         "abi": [
           {
             "type": "constructor",
