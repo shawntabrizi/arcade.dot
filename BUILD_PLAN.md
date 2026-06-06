@@ -21,12 +21,18 @@ Test gates: contracts → `cargo test`; template/dashboard logic → unit tests
       in the generated ABI JSON; dashboard must subscribe by topic hash.
       contracts/.cargo/config.toml deliberately drops the prototype's default
       riscv target so `cargo test` and `cargo pvm-contract build` coexist.)
-- [ ] 3. GCS v1 reference contract per §4, with unit tests: submitScore
+- [x] 3. GCS v1 reference contract per §4, with unit tests: submitScore
       semantics (non-improving never reverts, counters always move), both
       score orderings, u128::MAX sentinel rule, top-100 insert/update/evict,
       tie-breaking (`at` asc, then insertion order), 20-slot recent ring,
       pagination edges, `ScoreSubmitted` event, `updateListing` owner gate +
       cross-contract `register` (registry address as constructor arg).
+      (29 tests green. Notes: cross-contract register uses hand-built
+      calldata — abi_import! can't encode dynamic tuples — selector derived
+      from SOL_NAME in code + pinned in tests; MUST be verified end-to-end
+      on-chain in item 4. ScoreSubmitted topic0
+      0x860916283ae2e9eee2b7aa65ba521da02a25980e6ea2ac8b2d777f728aa9f19a.
+      ABI method names camelCase; struct field names stay snake_case.)
 - [ ] 4. Deploy both to Paseo Asset Hub (paseo-next-v2); record addresses in
       `cdm.json`; verify reads back (§10.3 step 8 style).
 
