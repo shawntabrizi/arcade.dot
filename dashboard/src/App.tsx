@@ -1,178 +1,58 @@
+// App shell: header with live best-block indicator, hash-routed home / detail
+// pages. Subscribes to new best blocks via the reads seam and bumps `blockKey`,
+// which pages key their refresh on (SPEC §7.4 — refresh only what's visible).
+
 import { useEffect, useState } from "react";
-import {
-  type GameInfo,
-  type PlayerPoints,
-  type RecentScore,
-  getGames,
-  getRecent,
-  getTopPlayers,
-  onNewBlock,
-} from "./arcade";
-
-function shortAddr(a: string): string {
-  if (!a.startsWith("0x") || a.length < 12) return a;
-  return `${a.slice(0, 6)}…${a.slice(-4)}`;
-}
-
-function relativeTime(unixSeconds: number): string {
-  if (!unixSeconds) return "—";
-  const diff = Math.floor(Date.now() / 1000) - unixSeconds;
-  if (diff < 0) return "just now";
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
-
-type Loadable<T> = { state: "loading" } | { state: "ok"; data: T } | { state: "error"; error: string };
+import { useReads } from "./reads-context";
+import { useRoute } from "./router";
+import { Home } from "./pages/Home";
+import { GameDetail } from "./pages/GameDetail";
 
 export function App() {
-  const [players, setPlayers] = useState<Loadable<PlayerPoints[]>>({ state: "loading" });
-  const [recent, setRecent] = useState<Loadable<RecentScore[]>>({ state: "loading" });
-  const [games, setGames] = useState<Loadable<GameInfo[]>>({ state: "loading" });
+  const reads = useReads();
+  const route = useRoute();
   const [block, setBlock] = useState<number | null>(null);
+  // Incremented on each new best block; pages depend on it to re-read visible
+  // surfaces. Decoupled from the raw block number so renders are stable.
+  const [blockKey, setBlockKey] = useState(0);
 
   useEffect(() => {
-    let cancelled = false;
-    // `initial` surfaces errors on first load; on later refreshes we keep the
-    // last good data instead of flashing an error on a transient RPC hiccup.
-    const run = async <T,>(
-      fn: () => Promise<T>,
-      set: (v: Loadable<T>) => void,
-      initial: boolean,
-    ) => {
-      try {
-        const data = await fn();
-        if (!cancelled) set({ state: "ok", data });
-      } catch (err) {
-        if (!cancelled && initial)
-          set({ state: "error", error: err instanceof Error ? err.message : String(err) });
-      }
-    };
-
-    let refreshing = false;
-    const refresh = async (initial: boolean) => {
-      if (refreshing) return; // don't pile up if a refresh outlives a block
-      refreshing = true;
-      await Promise.all([
-        run(() => getTopPlayers(10), setPlayers, initial),
-        run(() => getRecent(20), setRecent, initial),
-        run(() => getGames(), setGames, initial),
-      ]);
-      refreshing = false;
-    };
-
-    refresh(true);
-    // Re-read on every new best block so the board tracks the chain live.
-    const off = onNewBlock((blockNumber) => {
-      if (cancelled) return;
-      setBlock(blockNumber);
-      refresh(false);
+    const off = reads.onNewBlock((n) => {
+      setBlock(n);
+      setBlockKey((k) => k + 1);
     });
-    return () => {
-      cancelled = true;
-      off();
-    };
-  }, []);
+    return off;
+  }, [reads]);
 
   return (
-    <div className="page">
-      <header className="page-header">
-        <h1>Arcade</h1>
-        <p className="tagline">
-          Cross-game leaderboard for every game built from the Polkadot Leaderboard Playground.
-        </p>
-        <p className="block-status">
+    <div className="app">
+      <header className="app__header">
+        <a className="app__brand" href="#/">
+          <span className="app__logo">◆</span> Polkadot Arcade
+        </a>
+        <span className="app__block">
           {block === null ? (
-            <span className="block-connecting">connecting…</span>
+            <span className="muted">connecting…</span>
           ) : (
             <>
-              <span className="block-dot" /> live · best block{" "}
+              <span className="app__pulse" /> best block{" "}
               <code>#{block.toLocaleString()}</code>
             </>
           )}
-        </p>
+        </span>
       </header>
 
-      <div className="grid">
-        <section className="card">
-          <h2>Top players</h2>
-          {players.state === "loading" && <p className="empty">Loading…</p>}
-          {players.state === "error" && <p className="error">{players.error}</p>}
-          {players.state === "ok" && players.data.length === 0 && (
-            <p className="empty">No players yet.</p>
-          )}
-          {players.state === "ok" && players.data.length > 0 && (
-            <ol className="list">
-              {players.data.map((p, i) => (
-                <li key={p.address}>
-                  <span className="rank">#{i + 1}</span>
-                  <span className="player" title={p.address}>
-                    {p.displayName ?? shortAddr(p.address)}
-                  </span>
-                  <span className="score">{p.totalPoints.toString()}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
+      <main className="app__main">
+        {route.name === "home" ? (
+          <Home blockKey={blockKey} />
+        ) : (
+          <GameDetail address={route.address} blockKey={blockKey} />
+        )}
+      </main>
 
-        <section className="card">
-          <h2>Latest scores</h2>
-          {recent.state === "loading" && <p className="empty">Loading…</p>}
-          {recent.state === "error" && <p className="error">{recent.error}</p>}
-          {recent.state === "ok" && recent.data.length === 0 && (
-            <p className="empty">No submissions yet.</p>
-          )}
-          {recent.state === "ok" && recent.data.length > 0 && (
-            <ul className="list recent">
-              {recent.data.map((r, i) => (
-                <li key={`${r.timestamp}-${i}`}>
-                  <span className="player" title={r.player}>
-                    {r.displayName ?? shortAddr(r.player)}
-                  </span>
-                  <span className="score">{r.score.toString()}</span>
-                  <span className="meta">
-                    <code title={r.game}>{shortAddr(r.game)}</code> · {relativeTime(r.timestamp)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="card">
-          <h2>Active games</h2>
-          {games.state === "loading" && <p className="empty">Loading…</p>}
-          {games.state === "error" && <p className="error">{games.error}</p>}
-          {games.state === "ok" && games.data.length === 0 && (
-            <p className="empty">No games registered.</p>
-          )}
-          {games.state === "ok" && games.data.length > 0 && (
-            <ul className="list games">
-              {games.data
-                .slice()
-                .sort((a, b) => b.lastActivity - a.lastActivity)
-                .map((g) => (
-                  <li key={g.address}>
-                    <span className="player">{g.name || "(unnamed)"}</span>
-                    <code className="meta" title={g.address}>
-                      {shortAddr(g.address)}
-                    </code>
-                    <span className="meta">last play {relativeTime(g.lastActivity)}</span>
-                  </li>
-                ))}
-            </ul>
-          )}
-        </section>
-      </div>
-
-      <footer className="page-footer">
-        <p>
-          Reads <code>@example/arcade-playground</code> on Paseo Asset Hub. Any game that registers
-          with the Arcade and calls <code>recordScore</code> after each submit will show up here —
-          see the starter template for a working example.
-        </p>
+      <footer className="app__footer muted">
+        A read-only, permissionless game directory. Stats are read live from each
+        game’s contract on Paseo Asset Hub — no backend, no account.
       </footer>
     </div>
   );

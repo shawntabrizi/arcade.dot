@@ -101,11 +101,15 @@ Test gates: contracts → `cargo test`; template/dashboard logic → unit tests
 
 ## Phase 4 — Dashboard (SPEC §7)
 
-- [ ] 11. Dashboard skeleton: registry enumeration, `arcadeVersion()`
+- [x] 11. Dashboard skeleton: registry enumeration, `arcadeVersion()`
       conformance gate, home page (featured / most played / new / grid with
       gameType chips), game cards (§7.2); unit tests for sorting/gating logic.
-- [ ] 12. Game detail page (§7.3): stats, paginated leaderboard with
+- [x] 12. Game detail page (§7.3): stats, paginated leaderboard with
       scoreFormat rendering, recent plays, Play button (§7.5 behavior).
+      (40 unit tests + build green. Hash router; ArcadeReads interface is the
+      sole chain seam, fake impl behind VITE_ARCADE_FAKE_READS for item 15.
+      Leaderboard vs activity are separate components per §4.5. resolveName()
+      stubbed to truncated address — item 14 wires DotNS.)
 - [ ] 13. Live activity rail + read strategy (§7.4): bounded per-block refresh,
       session caching, graceful degradation; unit tests for merge/bounds.
 - [ ] 14. DotNS reverse name resolution + identicon/truncation fallback (§8.2).
