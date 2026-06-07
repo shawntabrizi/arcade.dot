@@ -6,9 +6,32 @@ import type { ScoreEntry, ScoreOrdering } from "./api";
 // the GCS reference contract. Unit tests inject a fake — they MUST NOT import
 // the real product-sdk. This is the single seam between policy (scoreboard.ts)
 // and the chain.
+// The host/login situation detected on load WITHOUT prompting (SPEC §8.1/§8.3).
+// `inHost` is the sync container heuristic (running inside the Polkadot app
+// host). `account` is the already-connected host wallet account, or null when
+// nobody is connected (a guest — whether in-host or standalone). The three UX
+// states are (inHost, account):
+//   account != null              → SIGNED IN
+//   account == null && inHost    → IN-HOST GUEST (sign-in available now)
+//   account == null && !inHost   → STANDALONE GUEST (sign-in unavailable)
+export interface SessionInfo {
+  inHost: boolean;
+  account: { ss58: string; h160: `0x${string}` } | null;
+}
+
 export interface ChainGateway {
   // Immutable contract metadata (SPEC §4.2). Cached for the session by the impl.
   scoreOrdering(): Promise<ScoreOrdering>;
+
+  // PROMPT-FREE login-status read for on-load UX (SPEC §8.1/§8.3). Uses only
+  // the passive SignerManager.getState() + the sync container heuristic; it
+  // MUST NOT call connect() or otherwise prompt. Returns the current session.
+  detectSession(): SessionInfo;
+
+  // Subscribe to passive session changes (the host connects/disconnects an
+  // account, e.g. after connect() resolves). Fires on change; returns an
+  // unsubscribe. The callback re-reads detectSession() for the new state.
+  subscribeSession(cb: () => void): () => void;
 
   // The signed-in player's H160, or null when no host account is connected
   // (guest mode). Synchronous read of cached connection state.

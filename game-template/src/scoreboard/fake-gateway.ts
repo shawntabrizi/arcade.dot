@@ -21,6 +21,13 @@ export interface FakeGatewayConfig {
   // Drives the launch gate (SPEC §8.3) so the requiresAccount=true flow can be
   // tested without a rebuild. Read by App.tsx under the test flag.
   requiresAccount?: boolean;
+  // Drives the on-load session detection (SPEC §8.3 in-host vs standalone) so
+  // the three login-status UX states can be tested without a real host. When
+  // unset, defaults to true so the existing e2e flows behave as "in-host".
+  inHost?: boolean;
+  // SS58 paired with `player` for detectSession()'s pre-connected account. Only
+  // its presence matters to the UI; defaults to a placeholder when omitted.
+  playerSs58?: string;
 }
 
 export interface FakeGatewayState {
@@ -58,6 +65,8 @@ function handle(): FakeGatewayHandle {
 export function createFakeGateway(): ChainGateway {
   const h = handle();
   let player = h.config.player ?? null;
+  let ss58 = h.config.playerSs58 ?? (player ? "fake-ss58" : null);
+  const listeners = new Set<() => void>();
 
   return {
     async scoreOrdering() {
@@ -66,9 +75,23 @@ export function createFakeGateway(): ChainGateway {
     currentPlayer() {
       return player;
     },
+    detectSession() {
+      // Default inHost to true so existing flows (which don't set it) keep
+      // behaving as in-host; standalone-guest tests set inHost: false.
+      return {
+        inHost: h.config.inHost ?? true,
+        account: player ? { ss58: ss58 ?? "fake-ss58", h160: player } : null,
+      };
+    },
+    subscribeSession(cb) {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
     async connect() {
       h.state.connectCalls++;
       player = h.config.connectsTo ?? DEFAULT_CONNECT;
+      ss58 = h.config.playerSs58 ?? "fake-ss58";
+      for (const cb of listeners) cb();
       return player;
     },
     async ensureMapped() {

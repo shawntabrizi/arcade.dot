@@ -37,10 +37,13 @@ function fakeGateway(opts: {
   bests?: Record<string, number | null>;
   // If true, connect() flips to this player.
   connectsTo?: `0x${string}`;
+  // Drives detectSession()'s in-host heuristic (defaults to true).
+  inHost?: boolean;
 }) {
   const state: FakeGatewayState = { connectCalls: 0, mappedCalls: 0, submits: [] };
   let player = opts.player ?? null;
   const bests = opts.bests ?? {};
+  const listeners = new Set<() => void>();
   const gateway: ChainGateway = {
     async scoreOrdering() {
       return opts.ordering ?? 0;
@@ -48,9 +51,20 @@ function fakeGateway(opts: {
     currentPlayer() {
       return player;
     },
+    detectSession() {
+      return {
+        inHost: opts.inHost ?? true,
+        account: player ? { ss58: "fake-ss58", h160: player } : null,
+      };
+    },
+    subscribeSession(cb) {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
     async connect() {
       state.connectCalls++;
       player = opts.connectsTo ?? ("0x00000000000000000000000000000000000000aa" as `0x${string}`);
+      for (const cb of listeners) cb();
       return player;
     },
     async ensureMapped() {
@@ -240,5 +254,56 @@ describe("requiresAccount gating (SPEC §8.3)", () => {
     const sb = new Scoreboard(gateway, new FakeStore(), { gameKey: GAME_KEY });
     expect(sb.requiresAccount).toBe(false);
     expect(sb.gatesAtLaunch()).toBe(false);
+  });
+});
+
+describe("on-load session detection (SPEC §8.1/§8.3)", () => {
+  // The three honest login-status states the UI renders on load, detected
+  // prompt-free (no connect()) via detectSession().
+
+  it("SIGNED IN: a pre-connected host account → account present, no connect()", () => {
+    const player = "0x00000000000000000000000000000000000000bb" as `0x${string}`;
+    const { gateway, state } = fakeGateway({ player, inHost: true });
+    const sb = new Scoreboard(gateway, new FakeStore(), { gameKey: GAME_KEY });
+    const session = sb.detectSession();
+    expect(session.account).toEqual({ ss58: "fake-ss58", h160: player });
+    expect(session.inHost).toBe(true);
+    expect(state.connectCalls).toBe(0); // detection NEVER prompts
+  });
+
+  it("IN-HOST GUEST: inside host, not connected → no account but inHost=true", () => {
+    const { gateway, state } = fakeGateway({ player: null, inHost: true });
+    const sb = new Scoreboard(gateway, new FakeStore(), { gameKey: GAME_KEY });
+    const session = sb.detectSession();
+    expect(session.account).toBeNull();
+    expect(session.inHost).toBe(true);
+    expect(state.connectCalls).toBe(0);
+  });
+
+  it("STANDALONE GUEST: not in host, not connected → no account, inHost=false", () => {
+    const { gateway, state } = fakeGateway({ player: null, inHost: false });
+    const sb = new Scoreboard(gateway, new FakeStore(), { gameKey: GAME_KEY });
+    const session = sb.detectSession();
+    expect(session.account).toBeNull();
+    expect(session.inHost).toBe(false);
+    expect(state.connectCalls).toBe(0);
+  });
+
+  it("signing in transitions IN-HOST GUEST → SIGNED IN and notifies subscribers", async () => {
+    const connectsTo = "0x00000000000000000000000000000000000000aa" as `0x${string}`;
+    const { gateway } = fakeGateway({ player: null, inHost: true, connectsTo });
+    const sb = new Scoreboard(gateway, new FakeStore(), { gameKey: GAME_KEY });
+
+    let notifications = 0;
+    const unsub = sb.subscribeSession(() => {
+      notifications++;
+    });
+
+    expect(sb.detectSession().account).toBeNull(); // guest before sign-in
+    await sb.signIn(); // the one explicit, prompt-allowed action
+    expect(notifications).toBe(1); // subscriber fired on connect
+    expect(sb.detectSession().account).toEqual({ ss58: "fake-ss58", h160: connectsTo });
+
+    unsub();
   });
 });

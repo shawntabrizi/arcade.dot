@@ -147,3 +147,36 @@ test("5. guest non-improving score (known best higher, higher-is-better) → no 
   const held = await page.evaluate((k) => window.localStorage.getItem(k), GUEST_BEST_KEY);
   expect(held).toBe("50");
 });
+
+// ── On-load login-status detection + UX (SPEC §8.1/§8.3) ────────────────────
+// The three honest states shown on load, prompt-free (no connect() on boot).
+
+test("6. SIGNED IN on load: shows 'Signed in as …', no boot connect()", async ({ page }) => {
+  await boot(page, { ordering: 0, player: SIGNED_IN_PLAYER, inHost: true });
+  await expect(page.getByText("Signed in as", { exact: false })).toBeVisible();
+  // Detection is passive — no connect() fired just by loading.
+  expect(await page.evaluate(() => window.__ARCADE_FAKE__?.state.connectCalls)).toBe(0);
+});
+
+test("7. IN-HOST GUEST on load: nudge + a 'Sign in' action available NOW (pre game-over)", async ({
+  page,
+}) => {
+  await boot(page, { ordering: 0, player: null, inHost: true, connectsTo: CONNECTS_TO });
+  await expect(page.getByText("in the Polkadot app", { exact: false })).toBeVisible();
+
+  const signIn = page.getByRole("button", { name: "Sign in", exact: true });
+  await expect(signIn).toBeVisible();
+  // No connect() until the user clicks (detection is prompt-free).
+  expect(await page.evaluate(() => window.__ARCADE_FAKE__?.state.connectCalls)).toBe(0);
+
+  // Clicking signs in → transitions to SIGNED IN, with no game played yet.
+  await signIn.click();
+  await expect(page.getByText("Signed in as", { exact: false })).toBeVisible();
+});
+
+test("8. STANDALONE GUEST on load: guest message, NO sign-in button", async ({ page }) => {
+  await boot(page, { ordering: 0, player: null, inHost: false });
+  await expect(page.getByText("open this game in the Polkadot app", { exact: false })).toBeVisible();
+  // Sign-in is unavailable standalone (connect would fail) — no button offered.
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toHaveCount(0);
+});

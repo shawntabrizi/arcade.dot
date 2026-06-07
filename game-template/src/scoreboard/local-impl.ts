@@ -55,6 +55,7 @@ export const localScoreboard: ScoreboardAPI = {
 // the local player; submit appends to the local log.
 export function createLocalGateway(ordering: ScoreOrdering = 0): ChainGateway {
   let connected = false;
+  const listeners = new Set<() => void>();
   return {
     async scoreOrdering() {
       return ordering;
@@ -62,8 +63,23 @@ export function createLocalGateway(ordering: ScoreOrdering = 0): ChainGateway {
     currentPlayer() {
       return connected ? LOCAL_PLAYER : null;
     },
+    detectSession() {
+      // Offline fallback: never in a host; "signed in" only after a local
+      // connect() (which is a no-op adopting the deterministic local player).
+      return {
+        inHost: false,
+        account: connected
+          ? { ss58: LOCAL_PLAYER, h160: LOCAL_PLAYER }
+          : null,
+      };
+    },
+    subscribeSession(cb) {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
     async connect() {
       connected = true;
+      for (const cb of listeners) cb();
       return LOCAL_PLAYER;
     },
     async ensureMapped() {

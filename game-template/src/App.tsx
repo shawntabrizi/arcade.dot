@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { SnakeGame } from "./games/snake/SnakeGame";
 import type { ScoreEntry } from "./scoreboard/api";
 import { Leaderboard, shortAddress } from "./scoreboard/Leaderboard";
@@ -64,6 +64,24 @@ export function App() {
     [],
   );
 
+  // SPEC §8.1/§8.3: detect the login status on load WITHOUT prompting (only
+  // getState() + the sync in-host heuristic), and keep it current via the
+  // gateway's passive subscription. This drives the three honest UX states:
+  //   account != null           → SIGNED IN (auto-submit at game over)
+  //   account == null && inHost  → IN-HOST GUEST (offer sign-in now)
+  //   account == null && !inHost → STANDALONE GUEST (no sign-in; guest only)
+  const [session, setSession] = useState(() => scoreboard.detectSession());
+  useEffect(() => {
+    const refresh = () => {
+      const next = scoreboard.detectSession();
+      setSession(next);
+      if (next.account) setPlayer(next.account.h160);
+    };
+    refresh(); // re-read after mount in case state changed before subscribing
+    return scoreboard.subscribeSession(refresh);
+  }, [scoreboard]);
+  const signedIn = session.account !== null;
+
   // SPEC §8.3: requiresAccount games gate sign-in at LAUNCH (before play),
   // not at game over. Guest-mode games never gate. `gated` clears once a host
   // wallet account is connected.
@@ -75,6 +93,21 @@ export function App() {
       const me = await scoreboard.signIn();
       setPlayer(me);
       setGated(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [scoreboard]);
+
+  // IN-HOST GUEST → SIGNED IN, on explicit user action (the ONE place a host
+  // prompt may fire, SPEC §8.1). Available NOW, not only at game over. On
+  // success the session subscription transitions the UI to SIGNED IN; we also
+  // set state here for immediacy.
+  const signInNow = useCallback(async () => {
+    setError(null);
+    try {
+      const me = await scoreboard.signIn();
+      setPlayer(me);
+      setSession(scoreboard.detectSession());
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -150,9 +183,27 @@ export function App() {
     <div className="page">
       <header className="page-header">
         <h1>Arcade Game Template</h1>
-        <p className="tagline">
-          Play as a guest — sign in only to save a score worth keeping.
-        </p>
+        {/* Three honest login-status states (SPEC §8.1/§8.3), detected on load
+            prompt-free and updated live via the session subscription. */}
+        {signedIn ? (
+          <p className="tagline" data-session="signed-in">
+            Signed in as{" "}
+            <code title={session.account!.h160}>{shortAddress(session.account!.h160)}</code>
+            {" "}— scores save automatically.
+          </p>
+        ) : session.inHost ? (
+          <p className="tagline" data-session="in-host-guest">
+            You&rsquo;re in the Polkadot app — sign in to keep your scores.{" "}
+            <button type="button" className="link-btn" onClick={signInNow}>
+              Sign in
+            </button>
+            {error && <span className="submit-error"> Couldn&rsquo;t sign in: {error}</span>}
+          </p>
+        ) : (
+          <p className="tagline" data-session="standalone-guest">
+            Guest mode — open this game in the Polkadot app to save scores.
+          </p>
+        )}
       </header>
 
       {!CONTRACT_DEPLOYED && (

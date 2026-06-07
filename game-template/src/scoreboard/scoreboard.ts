@@ -1,5 +1,5 @@
 import type { ScoreOrdering } from "./api";
-import type { ChainGateway, GuestStore } from "./gateway";
+import type { ChainGateway, GuestStore, SessionInfo } from "./gateway";
 
 // Namespaced per game so two template games on the same origin don't collide.
 const GUEST_KEY_PREFIX = "arcade:guest-best:";
@@ -83,6 +83,19 @@ export class Scoreboard {
 
   isSignedIn(): boolean {
     return this.gateway.currentPlayer() !== null;
+  }
+
+  // PROMPT-FREE on-load login-status read (SPEC §8.1/§8.3). Passthrough so the
+  // UI never reaches into the gateway. The UI maps the returned SessionInfo to
+  // the three states (SIGNED IN / IN-HOST GUEST / STANDALONE GUEST).
+  detectSession(): SessionInfo {
+    return this.gateway.detectSession();
+  }
+
+  // Subscribe to passive session changes (host connects/disconnects). Returns
+  // an unsubscribe; the callback should re-read detectSession().
+  subscribeSession(cb: () => void): () => void {
+    return this.gateway.subscribeSession(cb);
   }
 
   // The connected player's H160, or null in guest mode. Passthrough so the UI

@@ -3,7 +3,7 @@ import { SignerManager } from "@parity/product-sdk-signer";
 import { ensureAccountMapped, submitAndWatch } from "@parity/product-sdk-tx";
 import { ss58ToEthereum } from "@polkadot-api/sdk-ink";
 import type { ScoreEntry, ScoreOrdering } from "./api";
-import type { ChainGateway } from "./gateway";
+import type { ChainGateway, SessionInfo } from "./gateway";
 import { contractScoreboard } from "./reads";
 import { gcsContract, getClient, inkSdkBest } from "./gcs";
 
@@ -28,6 +28,24 @@ interface Connected {
   ss58: string;
   signer: PolkadotSigner;
   h160: `0x${string}`;
+}
+
+// Sync container detection (SPEC §8.3 in-host vs standalone). We deliberately do
+// NOT depend on @parity/product-sdk-host (past the npm cutoff); this inlines its
+// heuristic: we're inside the Polkadot app host if we're framed (cross-origin
+// access throws → treat as framed) or the host injected one of its markers.
+function isInsideHostSync(): boolean {
+  try {
+    if (window.self !== window.top) return true;
+  } catch {
+    // Cross-origin access to window.top throws — that only happens when framed.
+    return true;
+  }
+  const w = window as unknown as {
+    __HOST_API_PORT__?: unknown;
+    __HOST_WEBVIEW_MARK__?: unknown;
+  };
+  return w.__HOST_API_PORT__ != null || w.__HOST_WEBVIEW_MARK__ === true;
 }
 
 function toEntries(
@@ -74,11 +92,49 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
     return getClient().getUnsafeApi();
   }
 
+  // Adopt the passively-connected host account into the cached `connected`
+  // identity, WITHOUT prompting. Called from detectSession()/subscribeSession()
+  // when getState() already reports a selected host account (e.g. the user is
+  // signed in inside the host). Mirrors connect()'s derivation so reads/writes
+  // use the SAME H160 (see the caller-H160 note above; item-6 open question:
+  // confirm ss58ToEthereum(address) === the contract's caller() in a real host).
+  function adoptFromState(): void {
+    const state = manager.getState();
+    const account = state.status === "connected" ? state.selectedAccount : null;
+    if (!account) {
+      connected = null;
+      return;
+    }
+    if (connected && connected.ss58 === account.address) return;
+    const signer = account.getSigner();
+    const h160 = ss58ToEthereum(account.address).asHex() as `0x${string}`;
+    connected = { ss58: account.address, signer, h160 };
+  }
+
   return {
     scoreOrdering: readOrdering,
 
     currentPlayer() {
       return connected?.h160 ?? null;
+    },
+
+    detectSession(): SessionInfo {
+      // PROMPT-FREE: only getState() + the sync heuristic. Never connect().
+      adoptFromState();
+      return {
+        inHost: isInsideHostSync(),
+        account: connected ? { ss58: connected.ss58, h160: connected.h160 } : null,
+      };
+    },
+
+    subscribeSession(cb: () => void): () => void {
+      // SignerManager.subscribe fires on every state mutation (incl. after
+      // connect() resolves and on host-driven account changes). Re-derive the
+      // cached identity, then notify the UI to re-read detectSession().
+      return manager.subscribe(() => {
+        adoptFromState();
+        cb();
+      });
     },
 
     async connect() {
