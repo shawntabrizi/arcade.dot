@@ -31,7 +31,12 @@ describe("bounded per-block refresh (SPEC §7.4)", () => {
   it("refreshGames re-reads ONLY the passed addresses, not the whole registry", async () => {
     const { reads, refreshed } = countingReads(createFakeReads(SAMPLE_GAMES));
     const all = await reads.listGames();
-    expect(all.length).toBe(SAMPLE_GAMES.length);
+    // listGames applies the §7.4 conformance gate, so the non-conformant ghost
+    // fixture is excluded; only conformant fixtures are listed.
+    const conformantCount = SAMPLE_GAMES.filter(
+      (f) => f.arcadeVersion === undefined,
+    ).length;
+    expect(all.length).toBe(conformantCount);
 
     // Simulate a best-block tick that only refreshes the activity-rail subset
     // (the 2 most-recently-active games), NOT all listed games.
@@ -46,9 +51,11 @@ describe("bounded per-block refresh (SPEC §7.4)", () => {
 
   it("refreshGames omits addresses not in the session's game set", async () => {
     const reads = createFakeReads(SAMPLE_GAMES);
-    const ghost = "0x9999999999999999999999999999999999999999" as Address;
+    // An address that is in no fixture at all (distinct from the non-conformant
+    // ghost fixture, which is filtered by the gate, not by absence).
+    const absent = "0x000000000000000000000000000000000000dead" as Address;
     const real = SAMPLE_GAMES[0].game.listing.address;
-    const out = await reads.refreshGames([real, ghost]);
+    const out = await reads.refreshGames([real, absent]);
     expect(out.map((g) => g.listing.address)).toEqual([real]);
   });
 });

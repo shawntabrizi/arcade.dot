@@ -1,0 +1,4 @@
+# Playwright e2e run artifacts (item 15) — mirrors game-template/.gitignore
+test-results/
+playwright-report/
+.playwright/

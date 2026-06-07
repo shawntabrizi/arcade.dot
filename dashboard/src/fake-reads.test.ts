@@ -7,8 +7,17 @@ import type { Address } from "./types";
 describe("fake reads seam", () => {
   const reads = createFakeReads(SAMPLE_GAMES);
 
-  it("lists all fixture games", async () => {
-    expect((await reads.listGames()).length).toBe(SAMPLE_GAMES.length);
+  it("lists only conformant fixture games (§7.4 gate hides the ghost)", async () => {
+    const conformantCount = SAMPLE_GAMES.filter(
+      (f) => f.arcadeVersion === undefined,
+    ).length;
+    const listed = await reads.listGames();
+    expect(listed.length).toBe(conformantCount);
+    // The non-conformant ghost (arcadeVersion === null) is filtered out.
+    expect(listed.length).toBeLessThan(SAMPLE_GAMES.length);
+    expect(
+      listed.some((g) => g.listing.name.startsWith("Ghost")),
+    ).toBe(false);
   });
   it("getGame is address-case-insensitive; unknown → null", async () => {
     const addr = SAMPLE_GAMES[0].game.listing.address;

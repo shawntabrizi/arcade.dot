@@ -124,8 +124,11 @@ Test gates: contracts → `cargo test`; template/dashboard logic → unit tests
       regardless). Repointed to @arcade/registry 0x4d18…3cc2 +
       @arcade/gcs-reference, asset-hub endpoint preserved. No install hook
       clobbers it. 54 unit tests + build green.
-- [ ] 15. Playwright: home renders listed games (chain mocked), filter chips,
+- [x] 15. Playwright: home renders listed games (chain mocked), filter chips,
       detail page leaderboard, Play link resolution in/out of host.
+      (9 e2e green via VITE_ARCADE_FAKE_READS fixtures incl. a ghost game that
+      proves the conformance gate hides it; all 3 score formats, DotNS name
+      vs truncated fallback, Play anchor href/target. No production-code touch.)
 
 ## Phase 5 — Content + rehearsal (SPEC §2.2)
 
