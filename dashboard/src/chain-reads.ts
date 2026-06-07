@@ -26,9 +26,12 @@ import type {
   ScoreEntry,
 } from "./types";
 
-// Reads are dry-runs; any SS58 origin works and nothing is signed or paid
-// (SPEC §4.2, §8.4). The zero account never plays.
-const READ_ORIGIN = "5C4hrfjw9DjXZTzV3MwzrrAr9P1MJhSrvWGWqi1eSuyUpnhM";
+// Reads are dry-runs; nothing is signed or paid (SPEC §4.2, §8.4). The origin
+// MUST be an account already mapped on pallet_revive, or every dry-run reverts
+// with Revive::AccountUnmapped (pallet_revive needs the origin's H160). Alice
+// is mapped on paseo-next-v2 (she deploys the contracts), so reads succeed
+// without this dashboard ever signing or mapping anything itself.
+const READ_ORIGIN = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
 
 const REGISTRY_NAME = "@arcade/registry";
 const GCS_NAME = "@arcade/gcs-reference";
