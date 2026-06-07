@@ -1,44 +1,23 @@
 #!/usr/bin/env bash
-# Reproduce the playground frontend-serving divergence that broke item-6
-# sign-in ("product-sdk import failed: dynamically imported module 404").
+# ⚠️ INVALID — DO NOT USE. Retained only as a record of a wrong approach.
 #
-# Thesis: `<label>.app.dot.li` serves content that LAGS / DIVERGES from what
-# `playground deploy` last published. During a deploy/propagation window the
-# served index.html can reference JS chunks the edge doesn't (yet) serve →
-# the browser's dynamic import() 404s → sign-in throws.
+# This script curled `<label>.app.dot.li` directly and compared asset hashes.
+# That is fundamentally misleading: per the dotli source, `<label>.app.dot.li`
+# is a SANDBOX IFRAME whose Service Worker serves the app's assets from an
+# in-memory archive keyed to a `?cid=` URL param. A direct curl (no host shell,
+# no ?cid, no SW archive loaded) returns NGINX's SPA fallback HTML or a 503 —
+# never the dApp's real assets. The "stale build / hash divergence" this script
+# reported was an artifact of testing the wrong origin.
 #
-# Usage:  ./repro.sh <label> [path/to/local/dist]
-#   e.g.  ./repro.sh arcade-snake ../../game-template/dist
-set -uo pipefail
-
-LABEL="${1:-arcade-snake}"
-DIST="${2:-../../game-template/dist}"
-HOST="https://${LABEL}.app.dot.li"
-
-echo "== 1. Entry JS the live edge (${HOST}) references =="
-served=$(curl -s --max-time 30 "$HOST/" | grep -oE 'src="/assets/[A-Za-z0-9_.-]+\.js"' | head -1)
-echo "   served: ${served:-<none>}"
-
-echo "== 2. Entry JS in the local build that was last deployed =="
-if [ -f "$DIST/index.html" ]; then
-  local_entry=$(grep -oE 'src="/?assets/[A-Za-z0-9_.-]+\.js"' "$DIST/index.html" | head -1)
-  echo "   local : ${local_entry:-<none>}"
-else
-  echo "   local : <no dist at $DIST>"
-fi
-
-echo "== 3. Does every asset the SERVED index references resolve on the same host? =="
-curl -s --max-time 30 "$HOST/" \
-  | grep -oE '/assets/[A-Za-z0-9_.-]+\.(js|css)' | sort -u \
-  | while read -r f; do
-      printf "   %s  %s\n" "$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$HOST$f")" "$f"
-    done
-
-echo
-echo "INTERPRETATION:"
-echo " - If 'served' (step1) != 'local' (step2): the edge is serving a STALE"
-echo "   build, not your latest deploy → DotNS/edge cache lags publish."
-echo " - If any asset in step3 is NOT 200: the served index references a chunk"
-echo "   the edge can't serve → that is exactly the dynamic-import 404 that"
-echo "   broke sign-in. (It is intermittent: only while a partial/old build is"
-echo "   the live one.)"
+# CORRECT way to diagnose a deployed dApp's asset serving:
+#   1. Open https://<label>.dot.li in a browser (the HOST SHELL).
+#   2. DevTools → Network: watch the iframe at <label>.app.dot.li/?cid=… and
+#      look for 503s or 404s on JS chunks served by the Service Worker.
+#   3. Or resolve the DotNS name → CID and inspect the published archive's file
+#      listing to confirm every chunk (e.g. the product-sdk chunk) is present.
+#
+# Real cause of the item-6 "dynamically imported module 404": likely an
+# incomplete published archive, a bitswap/IPFS fetch failing partway, or the SW
+# 503ing before the archive finished loading. See BUILD_PLAN.md item 10b.
+echo "This repro is invalid; see the comment block and BUILD_PLAN.md item 10b." >&2
+exit 2

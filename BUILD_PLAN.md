@@ -82,22 +82,26 @@ Test gates: contracts → `cargo test`; template/dashboard logic → unit tests
       appears; sign-in path submits (host mocked via test SDK).
       (5/5 e2e green. Fake gateway behind VITE_ARCADE_FAKE_GATEWAY in the
       composition root; deterministic __snakeForceGameOver test hook.)
-- [ ] 10b. HARDENING (from live item-6 bug). ROOT CAUSE FOUND: the user's
-      "product-sdk import failed: …index-P8dkzTTl.js 404" is the playground
-      SERVING layer being stale/incomplete, NOT our build. Evidence (2026-06-07,
-      >1 day after deploy): live arcade-snake.app.dot.li serves index-C0MOZtEZ.js;
-      our committed dist has index-CH3OrXJ5.js (9 assets, all present, build
-      clean, 5/5 e2e green); the user hit index-P8dkzTTl.js — three different
-      builds. Deploys move the DotNS/CID pointer but the app.dot.li edge keeps
-      serving an old CID's (partial) contents. INFRA-SIDE — needs playground
-      team / cache-bust; flagged to user.
-      In-repo mitigations still worth doing:
-        (a) make the product-sdk import STATIC (entry chunk) not dynamic, so
-            sign-in doesn't depend on lazy-chunk fetch succeeding on the host;
-        (b) arcade:verify-frontend — post-deploy, fetch every dist file from
-            the live subdomain, fail on any non-200 (catches partial serves).
-      ⚠ Partially BLOCKED on infra for end-to-end proof; loop proceeds to
-      Phase 4 (dashboard) which is read-only and fully in our control.
+- [ ] 10b. HARDENING (from live item-6 bug). ⚠ EARLIER DIAGNOSIS RETRACTED.
+      My "stale edge serving an old build" claim was WRONG: it came from
+      curling <label>.app.dot.li directly, which (per the dotli source) is a
+      sandbox iframe whose Service Worker serves assets from a CID-keyed
+      archive — a direct curl returns NGINX's SPA fallback HTML, NOT the app's
+      assets. So the asset-hash "divergence" was an artifact of testing the
+      wrong URL; spikes/serving-repro/repro.sh is invalid and should not be
+      trusted. The user's "product-sdk import failed: …index-P8dkzTTl.js 404"
+      is a REAL in-iframe failure, but the real cause is one of: the published
+      CID's archive is incomplete (missing that chunk), a bitswap/IPFS fetch
+      failing partway, or the SW 503ing before the archive loaded — none
+      detectable by curl. Correct diagnosis: in-browser DevTools Network on
+      <label>.dot.li, or resolve the DotNS→CID and list the archive contents.
+      dotli serving architecture: host shell <label>.dot.li → DotNS→CID →
+      iframe <label>.app.dot.li/?cid=… → SW fetches archive → serves chunks
+      from IndexedDB (SWR cache, shows "new version" toast on CID change).
+      In-repo mitigation still worth doing: make the product-sdk import STATIC
+      (entry chunk) not lazy, so sign-in can't fail on a missing lazy chunk.
+      A post-deploy verify must check the CID archive completeness (not curl
+      the subdomain). NEEDS user decision on next step.
 
 ## Phase 4 — Dashboard (SPEC §7)
 
