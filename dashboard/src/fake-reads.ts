@@ -21,15 +21,44 @@ export interface FakeGame {
   names?: Record<string, string>;
 }
 
-export function createFakeReads(fixtures: FakeGame[]): ArcadeReads {
+// A fake DotnsReverseResolver.nameOf (SPEC §8.2): given a player H160, returns
+// the reverse name. Models the real contract's fail-closed semantics — return
+// "" for "no name" — and MAY throw to model a revert/RPC error. The default
+// (built from the fixtures' `names` maps) returns "" for unknown addresses.
+export type FakeReverseResolver = (player: Address) => Promise<string> | string;
+
+function fixtureResolver(fixtures: FakeGame[]): FakeReverseResolver {
+  return (player) => {
+    for (const f of fixtures) {
+      const n = f.names?.[player.toLowerCase()];
+      if (n) return n;
+    }
+    return ""; // fail-closed: no reverse name
+  };
+}
+
+export function createFakeReads(
+  fixtures: FakeGame[],
+  reverseResolver: FakeReverseResolver = fixtureResolver(fixtures),
+): ArcadeReads {
   const byAddr = new Map<string, FakeGame>(
     fixtures.map((f) => [f.game.listing.address.toLowerCase(), f]),
   );
   const find = (a: Address) => byAddr.get(a.toLowerCase());
+  // Session name cache (SPEC §8.2): a second lookup for the same address never
+  // re-invokes the resolver — mirrors chain-reads' nameCache.
+  const nameCache = new Map<string, string>();
 
   return {
     async listGames() {
       return fixtures.map((f) => f.game);
+    },
+    async refreshGames(addresses) {
+      // Mirror the chain impl: return cached game objects for the given subset,
+      // omitting any not in the fixture set. Bounded to O(addresses).
+      return addresses
+        .map((a) => find(a)?.game)
+        .filter((g): g is Game => g !== undefined);
     },
     async getGame(address) {
       return find(address)?.game ?? null;
@@ -48,11 +77,21 @@ export function createFakeReads(fixtures: FakeGame[]): ArcadeReads {
       return f.recent.slice(offset, offset + limit);
     },
     async resolveName(player) {
-      for (const f of fixtures) {
-        const n = f.names?.[player.toLowerCase()];
-        if (n) return n;
+      const key = player.toLowerCase();
+      const cached = nameCache.get(key);
+      if (cached !== undefined) return cached;
+      const fallback = shortAddress(player);
+      let resolved: string;
+      try {
+        // Empty (fail-closed) → fall back to the truncated address (§8.2).
+        const name = await reverseResolver(player);
+        resolved = name && name.length > 0 ? name : fallback;
+      } catch {
+        // Revert / RPC error → fall back to the truncated address (§8.2).
+        resolved = fallback;
       }
-      return shortAddress(player);
+      nameCache.set(key, resolved);
+      return resolved;
     },
     onNewBlock() {
       // Fakes don't tick; the e2e can drive refreshes by reloading or by a

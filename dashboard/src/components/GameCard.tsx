@@ -7,6 +7,7 @@ import { useReads } from "../reads-context";
 import { bucketGameType, relativeTime } from "../logic";
 import { gameHref } from "../router";
 import { Thumbnail } from "./Thumbnail";
+import { useNow } from "./useNow";
 import type { Game } from "../types";
 
 // Resolve the rank-1 player's display name for the card. Reads getLeaderboard(0,1)
@@ -40,6 +41,7 @@ export function GameCard({ game, featured = false }: { game: Game; featured?: bo
   const { listing, stats } = game;
   const topPlayer = useTopPlayer(game);
   const chip = bucketGameType(listing.gameType);
+  const now = useNow();
 
   return (
     <a className={`card${featured ? " card--featured" : ""}`} href={gameHref(listing.address)}>
@@ -62,7 +64,7 @@ export function GameCard({ game, featured = false }: { game: Game; featured?: bo
           <span className="stat">
             <strong>{stats.playCount.toLocaleString()}</strong> plays
           </span>
-          <span className="stat stat--muted">{relativeTime(stats.lastPlayedAt)}</span>
+          <span className="stat stat--muted">{relativeTime(stats.lastPlayedAt, now)}</span>
         </div>
         <div className="card__top">
           {topPlayer ? (

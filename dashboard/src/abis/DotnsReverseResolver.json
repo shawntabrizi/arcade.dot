@@ -1,0 +1,9 @@
+[
+  {
+    "type": "function",
+    "name": "nameOf",
+    "inputs": [{ "name": "addr", "type": "address", "internalType": "address" }],
+    "outputs": [{ "name": "name", "type": "string", "internalType": "string" }],
+    "stateMutability": "view"
+  }
+]

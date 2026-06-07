@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useReads } from "../reads-context";
 import { formatScore, relativeTime, shortAddress } from "../logic";
 import { useResolvedNames } from "./useResolvedNames";
+import { useNow } from "./useNow";
 import type { Address, ScoreConfig, ScoreEntry } from "../types";
 
 // The contract's recent ring holds 20 (SPEC §4.2); read the whole ring.
@@ -23,6 +24,7 @@ export function RecentPlays({
   const reads = useReads();
   const [entries, setEntries] = useState<ScoreEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const now = useNow();
 
   useEffect(() => {
     let cancelled = false;
@@ -54,7 +56,7 @@ export function RecentPlays({
                 {names.get(e.player) ?? shortAddress(e.player)}
               </span>
               <span className="recent__score">{formatScore(e.score, config)}</span>
-              <span className="recent__time muted">{relativeTime(e.at)}</span>
+              <span className="recent__time muted">{relativeTime(e.at, now)}</span>
             </li>
           ))}
         </ul>

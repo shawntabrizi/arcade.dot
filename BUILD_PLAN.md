@@ -110,9 +110,20 @@ Test gates: contracts → `cargo test`; template/dashboard logic → unit tests
       sole chain seam, fake impl behind VITE_ARCADE_FAKE_READS for item 15.
       Leaderboard vs activity are separate components per §4.5. resolveName()
       stubbed to truncated address — item 14 wires DotNS.)
-- [ ] 13. Live activity rail + read strategy (§7.4): bounded per-block refresh,
+- [x] 13. Live activity rail + read strategy (§7.4): bounded per-block refresh,
       session caching, graceful degradation; unit tests for merge/bounds.
-- [ ] 14. DotNS reverse name resolution + identicon/truncation fallback (§8.2).
+      (refreshGames(visible) re-reads only Module A stats for on-screen games;
+      registry enumerated once/session; mergeStats keeps last-good on failure;
+      relative time ticks on a 20s wall-clock independent of blocks.)
+- [x] 14. DotNS reverse name resolution + identicon/truncation fallback (§8.2).
+      (resolveName → DotnsReverseResolver.nameOf via sdk-ink, direct H160, no
+      new dep; fail-closed → truncated address + placeholder SVG identicon;
+      session-cached, progressive non-blocking swap-in.)
+      ALSO FIXED here: dashboard/cdm.json had stale @example/arcade-playground
+      keys (would break the real chain path; unit tests use fakes so passed
+      regardless). Repointed to @arcade/registry 0x4d18…3cc2 +
+      @arcade/gcs-reference, asset-hub endpoint preserved. No install hook
+      clobbers it. 54 unit tests + build green.
 - [ ] 15. Playwright: home renders listed games (chain mocked), filter chips,
       detail page leaderboard, Play link resolution in/out of host.
 

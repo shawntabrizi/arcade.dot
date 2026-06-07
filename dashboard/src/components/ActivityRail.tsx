@@ -14,6 +14,7 @@ import {
   relativeTime,
   shortAddress,
 } from "../logic";
+import { useNow } from "./useNow";
 import { gameHref } from "../router";
 import type { ActivityItem, Address, Game, ScoreEntry } from "../types";
 
@@ -27,6 +28,9 @@ export function ActivityRail({
   const reads = useReads();
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [loaded, setLoaded] = useState(false);
+  // Wall-clock tick so relative times advance independent of block refresh
+  // (§9.3: the rail keeps showing last-good rows with timestamps ticking).
+  const now = useNow();
 
   useEffect(() => {
     let cancelled = false;
@@ -37,19 +41,30 @@ export function ActivityRail({
         games.map((g) => [g.listing.address, g.listing.name]),
       );
       const perGame = new Map<Address, ScoreEntry[]>();
-      // Read each game's recent ring; one failure doesn't sink the rail.
+      // Read each game's recent ring; one game's failed read degrades to an
+      // empty slice for that game only (§9.3), never sinking the whole rail.
       await Promise.all(
         set.map(async (addr) => {
-          const rows = await reads.getRecent(addr, 0, ACTIVITY_FEED_LIMIT);
-          perGame.set(addr, rows);
+          try {
+            perGame.set(addr, await reads.getRecent(addr, 0, ACTIVITY_FEED_LIMIT));
+          } catch {
+            perGame.set(addr, []);
+          }
         }),
       );
       if (cancelled) return;
-      // Resolve player names for the merged feed.
       const merged = mergeActivity(perGame, nameByAddr);
-      const playerNames = await Promise.all(
-        merged.map((m) => reads.resolveName(m.player)),
-      );
+      // If this refresh yielded nothing but we already have last-good rows, keep
+      // them (§9.3: never blank a populated rail on a stalled refresh).
+      if (merged.length === 0 && items.length > 0) return;
+      // Resolve player names for the merged feed; a failed resolve falls back to
+      // the truncated address (resolveName already swallows errors).
+      let playerNames: string[] = [];
+      try {
+        playerNames = await Promise.all(merged.map((m) => reads.resolveName(m.player)));
+      } catch {
+        playerNames = merged.map((m) => shortAddress(m.player));
+      }
       if (cancelled) return;
       setItems(merged.map((m, i) => ({ ...m, playerName: playerNames[i] })));
       setLoaded(true);
@@ -77,7 +92,7 @@ export function ActivityRail({
               <a className="rail__game" href={gameHref(it.game)}>
                 {it.gameName || shortAddress(it.game)}
               </a>
-              <span className="rail__time muted">{relativeTime(it.at)}</span>
+              <span className="rail__time muted">{relativeTime(it.at, now)}</span>
             </li>
           ))}
         </ul>

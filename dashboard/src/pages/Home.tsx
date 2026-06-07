@@ -3,10 +3,11 @@
 // All sorting/bucketing is pure logic (logic.ts); this component just fetches
 // the conformant game list once and arranges it.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useReads } from "../reads-context";
 import {
   filterByChip,
+  mergeStats,
   presentChips,
   sortByLastPlayed,
   sortByPlayCount,
@@ -23,21 +24,41 @@ export function Home({ blockKey }: { blockKey: number }) {
   const reads = useReads();
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [chip, setChip] = useState<GameTypeChip | null>(null);
+  // Whether the registry has been enumerated this session. The first render
+  // enumerates once (listGames, §7.4); every later best-block tick refreshes
+  // ONLY the visible games' stats (refreshGames) — never re-enumerates.
+  const loadedOnce = useRef(false);
+  // Last-good games, kept in a ref so the per-block effect can read them to
+  // compute the bounded refresh set WITHOUT depending on `load` (which would
+  // re-run the effect on every merge).
+  const gamesRef = useRef<Game[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const games = await reads.listGames();
-        if (!cancelled) setLoad({ state: "ok", games });
+        if (!loadedOnce.current) {
+          // First load: enumerate the registry once and gate for conformance.
+          const games = await reads.listGames();
+          if (cancelled) return;
+          loadedOnce.current = true;
+          gamesRef.current = games;
+          setLoad({ state: "ok", games });
+          return;
+        }
+        // Bounded per-block refresh (§7.4): re-read ONLY the games we're showing
+        // (all currently-listed games on home) — O(visible), no re-enumeration.
+        const addrs = gamesRef.current.map((g) => g.listing.address);
+        const refreshed = await reads.refreshGames(addrs);
+        if (cancelled) return;
+        const merged = mergeStats(gamesRef.current, refreshed);
+        gamesRef.current = merged;
+        setLoad({ state: "ok", games: merged });
       } catch (err) {
-        // Only surface an error on first load; later refreshes keep last good.
-        if (!cancelled)
-          setLoad((prev) =>
-            prev.state === "ok"
-              ? prev
-              : { state: "error", error: err instanceof Error ? err.message : String(err) },
-          );
+        // First load failed → surface; a failed refresh keeps last-good (§9.3):
+        // gamesRef/load are untouched, so the page never blanks mid-demo.
+        if (!cancelled && !loadedOnce.current)
+          setLoad({ state: "error", error: err instanceof Error ? err.message : String(err) });
       }
     })();
     return () => {

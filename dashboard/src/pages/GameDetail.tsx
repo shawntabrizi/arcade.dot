@@ -10,6 +10,7 @@ import { homeHref } from "../router";
 import { Thumbnail } from "../components/Thumbnail";
 import { Leaderboard } from "../components/Leaderboard";
 import { RecentPlays } from "../components/RecentPlays";
+import { useNow } from "../components/useNow";
 import type { Address, Game, ScoreConfig } from "../types";
 
 // Block explorer for the contract address footer link (SPEC §7.3). Paseo Asset
@@ -36,6 +37,7 @@ type Load =
 export function GameDetail({ address, blockKey }: { address: Address; blockKey: number }) {
   const reads = useReads();
   const [load, setLoad] = useState<Load>({ state: "loading" });
+  const now = useNow();
 
   useEffect(() => {
     let cancelled = false;
@@ -125,7 +127,7 @@ export function GameDetail({ address, blockKey }: { address: Address; blockKey: 
           <span className="stat-box__label">players</span>
         </div>
         <div className="stat-box">
-          <span className="stat-box__value">{relativeTime(stats.lastPlayedAt)}</span>
+          <span className="stat-box__value">{relativeTime(stats.lastPlayedAt, now)}</span>
           <span className="stat-box__label">last played</span>
         </div>
       </section>

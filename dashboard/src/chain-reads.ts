@@ -10,6 +10,7 @@ import { createClient, type PolkadotClient } from "polkadot-api";
 import { getWsProvider } from "polkadot-api/ws-provider/web";
 import { createInkSdk } from "@polkadot-api/sdk-ink";
 import cdmJson from "../cdm.json";
+import dotnsReverseResolverAbi from "./abis/DotnsReverseResolver.json";
 import type { ArcadeReads } from "./arcade-reads";
 import {
   isConformant,
@@ -31,6 +32,14 @@ const READ_ORIGIN = "5C4hrfjw9DjXZTzV3MwzrrAr9P1MJhSrvWGWqi1eSuyUpnhM";
 
 const REGISTRY_NAME = "@arcade/registry";
 const GCS_NAME = "@arcade/gcs-reference";
+
+// SPEC §8.2: DotNS reverse resolver on Paseo Asset Hub. nameOf(h160) -> String,
+// fail-closed (returns "" if the address no longer owns the name). Players on
+// the GCS leaderboard are already H160, so this is a direct nameOf(player) call —
+// the dotns-sdk reverse path (useResolverStore.resolveAddressToName) passes the
+// EVM address verbatim with no conversion.
+const DOTNS_REVERSE_RESOLVER =
+  "0xa691F7ed662685a0D8aDF711A90D8302E5cfd2aD" as Address;
 
 // Registry pagination page size; the §4.3 cap is ≥ 50, so one page usually
 // covers the whole registry in the §9.2 ~100-game envelope.
@@ -99,6 +108,19 @@ function registry(): any {
     _registry = ink().getContract({ abi: e.abi }, e.address);
   }
   return _registry;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _resolver: any = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function resolver(): any {
+  if (!_resolver) {
+    _resolver = ink().getContract(
+      { abi: dotnsReverseResolverAbi as unknown[] },
+      DOTNS_REVERSE_RESOLVER,
+    );
+  }
+  return _resolver;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -177,18 +199,27 @@ function toEntries(rows: RawEntry[] | null): ScoreEntry[] {
 const scoreConfigCache = new Map<string, ScoreConfig>();
 const nameCache = new Map<string, string>();
 
-// Fetch arcadeVersion() + Module A stats together (SPEC §7.4 batched per game).
-// Returns null if the contract fails the conformance gate (§7.4) — that game is
-// skipped silently.
-async function statsIfConformant(address: Address): Promise<GameStats | null> {
+// SPEC §7.4 session caches for the read strategy:
+//  - listingCache: registry listing metadata, cached until session end (the
+//    registry is enumerated AT MOST once per session — re-enumeration would only
+//    be needed on a ListingChanged event, which we do not subscribe to in v1, so
+//    a session-lifetime cache is the documented choice).
+//  - conformanceCache: arcadeVersion() verdict per game address (§7.4); a game
+//    that passed the gate stays conformant for the session, so per-block refresh
+//    re-reads only the (mutable) Module A stats, never the immutable version.
+const listingCache = new Map<string, Listing>();
+let listingsEnumerated = false;
+const conformanceCache = new Map<string, boolean>();
+
+// Read ONLY Module A stats (SPEC §7.4 batched per game) — the mutable surface
+// refreshed every best block. Failed reads degrade to 0 rather than blanking.
+async function readStats(address: Address): Promise<GameStats> {
   const c = game(address);
-  const [version, playCount, uniquePlayers, lastPlayedAt] = await Promise.all([
-    q<number>(c, "arcadeVersion"),
+  const [playCount, uniquePlayers, lastPlayedAt] = await Promise.all([
     q<number | bigint>(c, "playCount"),
     q<number | bigint>(c, "uniquePlayers"),
     q<number | bigint>(c, "lastPlayedAt"),
   ]);
-  if (!isConformant(version === null ? null : Number(version))) return null;
   return {
     playCount: Number(playCount ?? 0),
     uniquePlayers: Number(uniquePlayers ?? 0),
@@ -196,21 +227,52 @@ async function statsIfConformant(address: Address): Promise<GameStats | null> {
   };
 }
 
+// SPEC §7.4 conformance gate, cached per session. arcadeVersion() is immutable
+// for a contract's lifetime, so it is read once per address and never again.
+async function isAddressConformant(address: Address): Promise<boolean> {
+  const key = address.toLowerCase();
+  const cached = conformanceCache.get(key);
+  if (cached !== undefined) return cached;
+  const version = await q<number>(game(address), "arcadeVersion");
+  const ok = isConformant(version === null ? null : Number(version));
+  conformanceCache.set(key, ok);
+  return ok;
+}
+
+// Fetch the conformance verdict (cached) + Module A stats. Returns null if the
+// contract fails the gate (§7.4) — that game is skipped silently.
+async function statsIfConformant(address: Address): Promise<GameStats | null> {
+  if (!(await isAddressConformant(address))) return null;
+  return readStats(address);
+}
+
+// Enumerate the registry into the session listing cache AT MOST once (SPEC §7.4,
+// §9.2). Subsequent calls return the cached map without re-enumerating.
 async function enumerateListings(): Promise<Map<Address, Listing>> {
+  if (listingsEnumerated) {
+    const m = new Map<Address, Listing>();
+    for (const l of listingCache.values()) m.set(l.address, l);
+    return m;
+  }
   const result = new Map<Address, Listing>();
   let offset = 0;
-  // Enumerate once per session (SPEC §7.4). Loop pages until a short page.
-  // Bounded by the registry's gameCount; the §9.2 envelope is ~100 games.
+  // Loop pages until a short page. Bounded by gameCount; the §9.2 envelope
+  // is ~100 games.
   for (;;) {
     const page = await q<RawGameEntry[]>(registry(), "getGames", {
       offset,
       limit: REGISTRY_PAGE,
     });
     if (!page || page.length === 0) break;
-    for (const e of page) result.set(e.game, toListing(e.game, e.listing));
+    for (const e of page) {
+      const listing = toListing(e.game, e.listing);
+      result.set(e.game, listing);
+      listingCache.set(e.game.toLowerCase(), listing);
+    }
     if (page.length < REGISTRY_PAGE) break;
     offset += REGISTRY_PAGE;
   }
+  listingsEnumerated = true;
   return result;
 }
 
@@ -229,16 +291,41 @@ export function createChainReads(): ArcadeReads {
       return games;
     },
 
-    async getGame(address: Address): Promise<Game | null> {
-      const opt = await q<{ isSome: boolean; value: RawListing }>(
-        registry(),
-        "getListing",
-        { game: address },
+    // SPEC §7.4 bounded per-block refresh: re-read ONLY the given games' stats.
+    // No registry enumeration, no re-gating of immutable arcadeVersion() — the
+    // conformance verdict and listing metadata come from the session caches, so
+    // per-block work is O(addresses), never O(all games).
+    async refreshGames(addresses: Address[]): Promise<Game[]> {
+      const refreshed = await Promise.all(
+        addresses.map(async (addr) => {
+          const listing = listingCache.get(addr.toLowerCase());
+          if (!listing) return null; // not in this session's listing set
+          const stats = await statsIfConformant(addr);
+          if (!stats) return null; // went non-conformant — drop silently
+          return { listing, stats } as Game;
+        }),
       );
-      if (!opt || !opt.isSome) return null;
+      return refreshed.filter((g): g is Game => g !== null);
+    },
+
+    async getGame(address: Address): Promise<Game | null> {
+      // Detail-page deep link: the listing is cached after the first read (until
+      // session end, §7.4), so per-block refresh re-reads only this one game's
+      // stats — the detail page's bounded read.
+      let listing = listingCache.get(address.toLowerCase());
+      if (!listing) {
+        const opt = await q<{ isSome: boolean; value: RawListing }>(
+          registry(),
+          "getListing",
+          { game: address },
+        );
+        if (!opt || !opt.isSome) return null;
+        listing = toListing(address, opt.value);
+        listingCache.set(address.toLowerCase(), listing);
+      }
       const stats = await statsIfConformant(address);
       if (!stats) return null;
-      return { listing: toListing(address, opt.value), stats };
+      return { listing, stats };
     },
 
     async getScoreConfig(address: Address): Promise<ScoreConfig> {
@@ -268,15 +355,24 @@ export function createChainReads(): ArcadeReads {
       return toEntries(await q<RawEntry[]>(game(address), "getRecent", { offset, limit }));
     },
 
-    // SPEC §8.2 seam — item 14 replaces this body with DotNS reverse resolution
-    // + identicon. For now: truncated address, cached per session.
+    // SPEC §8.2 player display names: DotnsReverseResolver.nameOf(player H160).
+    // Players are already H160 on the leaderboard, so this is a direct call (no
+    // conversion). On a non-empty name → use it; on "" / revert / error → fall
+    // back to the truncated address (the identicon is rendered separately by the
+    // placeholder SVG, seeded by the same address — §6.4 fallback). Cached per
+    // session (nameCache), so a second lookup never re-invokes the resolver and
+    // resolution never blocks card/leaderboard render (useResolvedNames swaps the
+    // name in progressively when it lands).
     async resolveName(player: Address): Promise<string> {
       const key = player.toLowerCase();
       const cached = nameCache.get(key);
-      if (cached) return cached;
-      const name = shortAddress(player);
-      nameCache.set(key, name);
-      return name;
+      if (cached !== undefined) return cached;
+      const fallback = shortAddress(player);
+      // q() already swallows reverts/errors → null; nameOf is fail-closed → "".
+      const name = await q<string>(resolver(), "nameOf", { addr: player });
+      const resolved = name && name.length > 0 ? name : fallback;
+      nameCache.set(key, resolved);
+      return resolved;
     },
 
     onNewBlock(cb): () => void {

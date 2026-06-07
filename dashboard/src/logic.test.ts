@@ -10,6 +10,7 @@ import {
   filterByChip,
   activityGameSet,
   mergeActivity,
+  mergeStats,
   formatScore,
   formatDuration,
   toLaunchUrl,
@@ -175,6 +176,35 @@ describe("activity merge bounds", () => {
     const merged = mergeActivity(perGame, new Map(), 10);
     // equal `at` → lower address first (A before B), regardless of insertion
     expect(merged.map((m) => m.game)).toEqual([A, B]);
+  });
+});
+
+// ---- bounded-refresh merge (SPEC §7.4, §9.3) ----------------------------
+describe("mergeStats", () => {
+  const base = [
+    game({ addr: "0x1", playCount: 1 }),
+    game({ addr: "0x2", playCount: 2 }),
+  ];
+  it("swaps fresh stats in by address; missing games keep last-good", () => {
+    const fresh = [{ ...base[0], stats: { ...base[0].stats, playCount: 99 } }];
+    const merged = mergeStats(base, fresh);
+    expect(merged[0].stats.playCount).toBe(99);
+    expect(merged[1]).toBe(base[1]); // untouched reference = last-fetched
+  });
+  it("matches case-insensitively on address and preserves order", () => {
+    // Fresh entry carries the same address in a different case — the match must
+    // still apply (chain may return checksummed/upper H160).
+    const fresh = [
+      {
+        ...base[1],
+        listing: { ...base[1].listing, address: "0X2" as Address },
+        stats: { ...base[1].stats, playCount: 50 },
+      },
+    ];
+    const merged = mergeStats(base, fresh);
+    expect(merged).toHaveLength(2);
+    expect(merged[0]).toBe(base[0]); // untouched
+    expect(merged[1].stats.playCount).toBe(50); // matched despite case diff
   });
 });
 

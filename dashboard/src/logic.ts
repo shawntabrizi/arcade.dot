@@ -135,6 +135,18 @@ export function mergeActivity(
   return items.slice(0, feedLimit);
 }
 
+// Merge a bounded per-block refresh (SPEC §7.4) into the session's game list:
+// for each game in `base`, swap in the fresh stats from `refreshed` (matched by
+// address) if present, otherwise keep the last-fetched game unchanged. Listing
+// order and identity are preserved; games absent from `refreshed` degrade to
+// their last-good state (§9.3 — a failed/partial refresh never drops a card).
+export function mergeStats(base: Game[], refreshed: Game[]): Game[] {
+  const fresh = new Map<string, Game>(
+    refreshed.map((g) => [g.listing.address.toLowerCase(), g]),
+  );
+  return base.map((g) => fresh.get(g.listing.address.toLowerCase()) ?? g);
+}
+
 // ---- Score formatting (SPEC §4.2 scoreFormat / scoreUnit) ---------------
 // 0 = points (integer), 1 = duration ms rendered m:ss.mmm, 2 = value + unit.
 // The lower-is-better sentinel u128::MAX (§4.2) means "no score" and renders

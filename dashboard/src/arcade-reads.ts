@@ -20,8 +20,18 @@ export interface ArcadeReads {
   // Enumerate the registry once (SPEC §5.3, §7.4), apply the arcadeVersion()
   // conformance gate (SPEC §7.4), batch each game's Module A stats (§7.4), and
   // return only conformant, listed games. Implementations decide pagination and
-  // caching; the UI just awaits the filtered list.
+  // caching; the UI just awaits the filtered list. Per §7.4 the full registry
+  // is enumerated AT MOST once per session — the impl caches the listing set and
+  // its conformance verdicts, so a second call only re-reads (mutable) stats.
   listGames(): Promise<Game[]>;
+
+  // SPEC §7.4 bounded per-block refresh: re-read ONLY the given games' (mutable)
+  // Module A stats — no registry enumeration, no re-gating of immutable values.
+  // This is what the home page / activity rail call on every new best block so
+  // per-block work is O(visible games), never O(all games). Returns the refreshed
+  // Game objects (cached listing + fresh stats); games absent from the session
+  // cache or that have gone non-conformant are simply omitted.
+  refreshGames(addresses: Address[]): Promise<Game[]>;
 
   // Single listing lookup (SPEC §5.3 getListing) for a detail-page deep link
   // where the home list hasn't loaded. Null if absent or non-conformant.
