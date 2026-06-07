@@ -1,6 +1,7 @@
 import type { PolkadotSigner } from "polkadot-api";
 import { SignerManager } from "@parity/product-sdk-signer";
 import { ensureAccountMapped, submitAndWatch } from "@parity/product-sdk-tx";
+import { isInsideContainerSync } from "@parity/product-sdk-host";
 import { ss58ToEthereum } from "@polkadot-api/sdk-ink";
 import type { ScoreEntry, ScoreOrdering } from "./api";
 import type { ChainGateway, SessionInfo } from "./gateway";
@@ -30,22 +31,12 @@ interface Connected {
   h160: `0x${string}`;
 }
 
-// Sync container detection (SPEC §8.3 in-host vs standalone). We deliberately do
-// NOT depend on @parity/product-sdk-host (past the npm cutoff); this inlines its
-// heuristic: we're inside the Polkadot app host if we're framed (cross-origin
-// access throws → treat as framed) or the host injected one of its markers.
+// Sync container detection (SPEC §8.3 in-host vs standalone) via the maintained
+// host SDK. isInsideContainerSync() is the synchronous heuristic (framed /
+// host markers); isInsideContainer() (async) does a deeper product-sdk probe,
+// but sync is right for the prompt-free on-load detection in detectSession().
 function isInsideHostSync(): boolean {
-  try {
-    if (window.self !== window.top) return true;
-  } catch {
-    // Cross-origin access to window.top throws — that only happens when framed.
-    return true;
-  }
-  const w = window as unknown as {
-    __HOST_API_PORT__?: unknown;
-    __HOST_WEBVIEW_MARK__?: unknown;
-  };
-  return w.__HOST_API_PORT__ != null || w.__HOST_WEBVIEW_MARK__ === true;
+  return isInsideContainerSync();
 }
 
 function toEntries(

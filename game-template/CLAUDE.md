@@ -176,11 +176,13 @@ Notes on individual steps:
 - **`owner` mismatch on `updateListing`** (step 7 reverts). The step-7 signer
   is not the step-4 deployer. Re-run with the **same** `ARCADE_SURI` you used
   for step 4 (or redeploy with the intended account).
-- **`npm install` resolves nothing / unexpected versions.** This repo is pinned
-  against an **npm registry date cutoff** (~2026-06-03). Do not bump
-  dependencies past the cutoff to "fix" an install — pin within it. The SDK is
-  intentionally on `@parity/product-sdk-signer` 0.6.x / `-tx` 0.2.x for the
-  same reason.
+- **`npm install` refuses a fresh version.** The user's global npm has
+  `min-release-age=3` (won't install versions published in the last 3 days —
+  a supply-chain guard). For the first-party `@parity/*` SDK we track latest, a
+  scoped `game-template/.npmrc` sets `min-release-age=0` to override it for this
+  package only (the machine-wide setting is untouched). Keep `@parity/*` on
+  **latest** (`product-sdk-signer`/`-tx`/`-host`) — we ship against the SDK the
+  dot.li host runs. Don't add the override for third-party packages.
 - **Contract not deployed at runtime** (dev server shows a "Game contract not
   deployed" banner). Run step 4 to populate `cdm.json`, then restart the dev
   server.
