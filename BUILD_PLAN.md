@@ -141,6 +141,21 @@ Test gates: contracts → `cargo test`; template/dashboard logic → unit tests
 - [ ] 17. Dress rehearsal: fresh end-to-end run (prompt → listed game →
       visible on dashboard); fix what breaks; record results here.
 
+## Known issues (found while playing locally)
+
+- **Read origin must be pallet_revive-mapped** — FIXED. The dashboard's read
+  origin was unmapped → every dry-run reverted `AccountUnmapped` → empty
+  registry. Now uses Alice (mapped). Added `dashboard` live smoke test
+  (`npm run test:smoke`) that reads the real registry so this can't silently
+  regress (unit/e2e use fakes and stayed green through the bug).
+- **DotNS resolver not found on paseo-next-v2** — OPEN. sdk-ink's
+  `getContract` for the reverse resolver (0xa691…d2aD) emits a background
+  "Contract not found" rejection on `wss://paseo-asset-hub-next-rpc.polkadot.io`;
+  names always fall back to truncated addresses (spec §8.2 fail-closed, so
+  functionally OK). To fix: confirm the resolver's address/network, or do the
+  reverse lookup via a raw revive dry-run instead of sdk-ink (avoids the
+  existence check + floating rejection). Low priority — fallback works.
+
 ## Spike results
 
 ### Item 5 — dApp→dApp navigation (web host, 2026-06-06)

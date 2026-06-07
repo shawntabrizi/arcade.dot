@@ -93,6 +93,14 @@ function client(): PolkadotClient {
   return _client;
 }
 
+// Close the live connection. The app never needs this (the socket lives for the
+// session), but the live smoke test calls it so the test process can exit.
+export function closeChainReads(): void {
+  _client?.destroy();
+  _client = null;
+  _ink = null;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _ink: any = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -118,10 +126,14 @@ let _resolver: any = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function resolver(): any {
   if (!_resolver) {
-    _resolver = ink().getContract(
-      { abi: dotnsReverseResolverAbi as unknown[] },
-      DOTNS_REVERSE_RESOLVER,
-    );
+    try {
+      _resolver = ink().getContract(
+        { abi: dotnsReverseResolverAbi as unknown[] },
+        DOTNS_REVERSE_RESOLVER,
+      );
+    } catch {
+      return null; // resolver not deployable/found → callers use the fallback
+    }
   }
   return _resolver;
 }
@@ -371,9 +383,20 @@ export function createChainReads(): ArcadeReads {
       const cached = nameCache.get(key);
       if (cached !== undefined) return cached;
       const fallback = shortAddress(player);
-      // q() already swallows reverts/errors → null; nameOf is fail-closed → "".
-      const name = await q<string>(resolver(), "nameOf", { addr: player });
-      const resolved = name && name.length > 0 ? name : fallback;
+      // Fully fail-closed (SPEC §8.2): a missing/undeployed resolver, a revert,
+      // or any thrown/rejected error → truncated-address fallback, never an
+      // escaping rejection. (The live smoke test caught this: the resolver
+      // lookup rejected with "Contract not found" as an unhandled rejection.)
+      let resolved = fallback;
+      try {
+        const c = resolver();
+        if (c) {
+          const name = await q<string>(c, "nameOf", { addr: player });
+          if (name && name.length > 0) resolved = name;
+        }
+      } catch {
+        /* keep fallback */
+      }
       nameCache.set(key, resolved);
       return resolved;
     },
