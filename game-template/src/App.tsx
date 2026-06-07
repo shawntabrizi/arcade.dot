@@ -54,7 +54,14 @@ export function App() {
   const scoreboard = useMemo(
     () =>
       new Scoreboard(
-        FAKE_GATEWAY ? createFakeGateway() : createSdkGateway(),
+        FAKE_GATEWAY
+          ? createFakeGateway()
+          : // dot.li exposes only a per-app PRODUCT ACCOUNT (derived from the
+            // user's root session + the app's .dot identifier); raw wallet
+            // accounts come back empty. dotNsIdentifier MUST equal the deployed
+            // domain (arcade.config.json `domain`) or the host rejects the
+            // account request. (SPEC §8.1 — revised after the item-6 in-host test.)
+            createSdkGateway({ dotNsIdentifier: `${arcadeConfig.domain}.dot` }),
         globalThis.localStorage,
         {
           gameKey: GAME_KEY,

@@ -635,24 +635,38 @@ mobile-first).
 
 ### 8.1 Player identity [MVP]
 
-A player is their **host wallet account** — the Polkadot account from the
-mobile app / host environment, exposed to games via product-sdk's
-`SignerManager`. Games MUST submit scores from this account, not from
-per-app product accounts or browser-local burner keys, because:
+> **Revised after the item-6 in-host test (2026-06-07).** An earlier draft
+> required the *host wallet account*. The dot.li web host does **not** expose
+> raw wallet accounts to a sandboxed app — `getLegacyAccounts()` returns `[]`
+> — so that approach yields "no accounts available." The host's only account
+> path for embedded apps is a **product account**.
 
-- the same human is the same H160 across every game — leaderboards,
-  activity feeds, and (future) profiles can unify a player;
-- DotNS reverse resolution attaches the player's name to their entries
-  (§8.2), which per-app derived accounts would never get.
+A player is a **per-app product account**: the host derives a keypair from
+the user's root session and the app's `.dot` identifier
+(`dotNsIdentifier`, which MUST equal the deployed domain or the host rejects
+the request). Games obtain it via product-sdk's `SignerManager` configured
+with `productAccount: { dotNsIdentifier: "<domain>.dot", derivationIndex: 0 }`,
+then `connect("host")` (which also requests the `ChainSubmit` permission).
 
-(Privacy tradeoff, stated openly: all of a player's game activity is
-linkable on-chain. Per-game pseudonymity via product accounts is a
-[Post-MVP] option a future standard version could admit.)
+Consequences, stated honestly:
 
-On-chain, players are H160. Submission uses `ensureAccountMapped` (one-time
-`pallet_revive` mapping) + `submitAndWatch` at best-block, both from
-product-sdk. **The prototype's burner-wallet + faucet machinery is removed
-entirely.**
+- **Identity is per-game, not cross-game.** The same human has a *different*
+  H160 in every game (each derived from a different `.dot` identifier). A
+  player cannot be unified across games on-chain. This is acceptable because
+  cross-game scoring/ranking is already a non-goal (§1.5); within one game
+  the player is stable, so leaderboards and "this is you" work.
+- **DotNS names won't resolve for players (§8.2).** A product account is a
+  derived keypair, not the user's named account, so reverse resolution finds
+  no name — leaderboard entries show the truncated-address fallback. (This is
+  the dominant reason names rarely resolve, alongside the resolver-availability
+  note in §8.2.)
+
+On-chain, players are H160 (`ss58ToEthereum(account.address)` — the address
+`pallet_revive` maps the signer to, which `getBest`/`submitScore` must agree
+on; **not** `SignerAccount.h160Address`, which is keccak-derived). Submission
+uses `ensureAccountMapped` (one-time mapping) + `submitAndWatch` at
+best-block, both from product-sdk. **The prototype's burner-wallet + faucet
+machinery is removed entirely.**
 
 ### 8.2 Player display names [MVP]
 

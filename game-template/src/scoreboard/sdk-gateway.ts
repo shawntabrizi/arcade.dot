@@ -50,12 +50,24 @@ export interface SdkGatewayOptions {
   dappName?: string;
   // SS58 prefix for Paseo Asset Hub. 0 matches the deploy/verify scripts.
   ss58Prefix?: number;
+  // The app's `.dot` identifier (e.g. "arcade-snake.dot"). REQUIRED in a real
+  // dot.li host: the web host returns no raw wallet accounts, only a per-app
+  // PRODUCT ACCOUNT derived from the user's root session + this identifier, and
+  // it MUST match the deployed domain or the host rejects the request with
+  // DomainNotValid. Omit only outside a host (no account available anyway).
+  dotNsIdentifier?: string;
 }
 
 export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway {
   const manager = new SignerManager({
     dappName: options.dappName ?? "arcade-game",
     ss58Prefix: options.ss58Prefix ?? 0,
+    // Product-account path (SPEC §8.1, revised per item 6): the host derives a
+    // per-app keypair for this identifier. Without it, connect() falls through
+    // to getLegacyAccounts() which the web host returns empty → "no accounts".
+    ...(options.dotNsIdentifier
+      ? { productAccount: { dotNsIdentifier: options.dotNsIdentifier, derivationIndex: 0 } }
+      : {}),
   });
 
   let connected: Connected | null = null;
