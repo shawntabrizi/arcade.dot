@@ -10,6 +10,8 @@
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
     "test:e2e": "playwright test",
+    "test:boot": "npm run build && playwright test --config playwright.boot.config.ts",
+    "smoke:read": "node scripts/smoke-read.mjs",
     "arcade:gen-thumbnail": "node scripts/gen-thumbnail.mjs",
     "arcade:deploy-contract": "node scripts/deploy-contract.mjs",
     "arcade:upload-thumbnail": "node scripts/upload-thumbnail.mjs",
