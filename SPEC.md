@@ -869,6 +869,21 @@ verification badges.
 proofs of play); rate-limiting or deposits if testnet economics prove
 insufficient.
 
+**Full activity capture via AutoSigning** — today the template only submits
+on a personal best (plus a player's first play), so `playCount`/recent
+under-record actual plays (every submit is a signed tx = a host approval, so
+prompting every game over is too aggressive). The right fix is frictionless
+background submission: request the host's `AutoSigning` resource once
+(`SignerManager` `onConnect` → `requestResourceAllocation([{ tag:
+"AutoSigning" }])`; see product-sdk `examples/signer-demo/src/main.ts` and
+`packages/host` `AllocatableResource`/`AllocationOutcome`), then record every
+play silently. BLOCKED: `AutoSigning` returns `NotAvailable` on Android/iOS
+wallets today, and slot renewal depends on paritytech/individuality#931
+(open). When it lands, wire it in `onConnect`, gate on the outcome tag
+(`Allocated` → background-submit every play; `Rejected`/`NotAvailable` →
+stay on the personal-best prompt). Until then, personal-best-only is the
+intended behavior, not a bug.
+
 **Infrastructure** — an event-history indexer once the §9.2 envelope is
 exceeded (contracts already emit what it needs); developer mode / test
 accounts for local iteration.

@@ -156,6 +156,22 @@ Test gates: contracts → `cargo test`; template/dashboard logic → unit tests
   reverse lookup via a raw revive dry-run instead of sdk-ink (avoids the
   existence check + floating rejection). Low priority — fallback works.
 
+## Post-MVP: full activity capture via AutoSigning
+
+The template submits a score only on a personal best (+ a player's first
+play), so on-chain activity (playCount / recent ring) under-records real
+plays. Prompting every game over is too aggressive — each submit is a signed
+tx (a host approval). The right fix is background submission via the host's
+`AutoSigning` resource grant (request once in SignerManager `onConnect`, then
+submit every play silently). BLOCKED today: `AutoSigning` returns
+`NotAvailable` on Android/iOS wallets (slot renewal: paritytech/individuality
+#931, open). Refs: product-sdk `examples/signer-demo/src/main.ts`,
+`packages/signer/src/types.ts` (onConnect), `packages/host/src/truapi.ts`
+(AllocatableResource/AllocationOutcome), `packages/terminal/README.md`
+(caveat). When it lands: gate on the outcome tag — `Allocated` → background-
+submit every play; else keep the personal-best prompt. See SPEC §11. Until
+then, personal-best-only is intended, not a bug.
+
 ## Spike results
 
 ### Item 5 — dApp→dApp navigation (web host, 2026-06-06)
