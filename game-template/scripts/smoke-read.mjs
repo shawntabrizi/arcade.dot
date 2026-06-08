@@ -14,9 +14,11 @@ const cdm = JSON.parse(readFileSync(cdmPath, "utf8"));
 const target = Object.keys(cdm.contracts)[0];
 const gcs = cdm.contracts[target]?.["@arcade/gcs-reference"];
 const endpoint = cdm.targets[target]?.["asset-hub"];
-// A pallet_revive-mapped origin (Alice) — an unmapped origin reverts dry-runs
-// with AccountUnmapped. Reads are dry-runs; nothing is signed or paid.
-const ORIGIN = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
+// pallet-revive's pallet account — the canonical query origin (product-sdk
+// PR #152). Must match src/scoreboard/gcs.ts READ_ORIGIN so this smoke exercises
+// the exact origin the app reads with. An unmapped origin reverts dry-runs with
+// AccountUnmapped. Reads are dry-runs; nothing is signed or paid.
+const ORIGIN = "5EYCAe5ijiYfhaAUBd6H9WGRTsvwFFc7GnhQkiHvBYxdvpbV";
 
 if (!gcs?.address || !gcs?.abi || !endpoint) {
   console.error("smoke:read FAIL — cdm.json missing gcs-reference address/abi or endpoint");

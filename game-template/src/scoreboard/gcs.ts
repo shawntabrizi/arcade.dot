@@ -10,13 +10,14 @@ import cdmJson from "../../cdm.json";
 // address is recorded in cdm.json by the deploy pipeline (SPEC §10.3 step 4).
 const CONTRACT_NAME = "@arcade/gcs-reference";
 
-// The origin for read dry-runs. pallet_revive reverts a contract dry-run with
-// AccountUnmapped unless the origin is an account already mapped on-chain — so
-// this is NOT "any SS58". Alice is mapped on paseo-next-v2 (she deploys the
-// contracts), so reads succeed without the app signing/mapping anything. A
-// single shared constant: an earlier unmapped origin (5C4hrfjw…) made the
-// in-game board read empty even when scores existed on-chain.
-export const READ_ORIGIN = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
+// The origin for read dry-runs. pallet_revive rejects an unmapped origin (an
+// arbitrary SS58 like 5C4hrfjw… reverts with AccountUnmapped → empty board), so
+// the origin must be one the runtime accepts. Per product-sdk PR #152, the
+// canonical query origin is pallet-revive's OWN pallet account — stable, always
+// on-chain, and not tied to a dev seed (//Alice). It is
+// `PalletId(*b"py/reviv").into_account_truncating()` = bytes "modlpy/reviv" +
+// 20 zero bytes, SS58-encoded (prefix 42). Verified to read our GCS contract.
+export const READ_ORIGIN = "5EYCAe5ijiYfhaAUBd6H9WGRTsvwFFc7GnhQkiHvBYxdvpbV";
 
 interface ContractEntry {
   address: `0x${string}`;

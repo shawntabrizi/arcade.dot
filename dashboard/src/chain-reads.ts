@@ -26,12 +26,13 @@ import type {
   ScoreEntry,
 } from "./types";
 
-// Reads are dry-runs; nothing is signed or paid (SPEC §4.2, §8.4). The origin
-// MUST be an account already mapped on pallet_revive, or every dry-run reverts
-// with Revive::AccountUnmapped (pallet_revive needs the origin's H160). Alice
-// is mapped on paseo-next-v2 (she deploys the contracts), so reads succeed
-// without this dashboard ever signing or mapping anything itself.
-const READ_ORIGIN = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
+// Reads are dry-runs; nothing is signed or paid (SPEC §4.2, §8.4). An unmapped
+// origin reverts every dry-run with Revive::AccountUnmapped. Per product-sdk
+// PR #152, the canonical query origin is pallet-revive's OWN pallet account —
+// stable, always on-chain, not a dev seed (//Alice): it is
+// `PalletId(*b"py/reviv").into_account_truncating()` = "modlpy/reviv" + 20 zero
+// bytes, SS58-encoded (prefix 42). The dashboard never signs or maps anything.
+const READ_ORIGIN = "5EYCAe5ijiYfhaAUBd6H9WGRTsvwFFc7GnhQkiHvBYxdvpbV";
 
 const REGISTRY_NAME = "@arcade/registry";
 const GCS_NAME = "@arcade/gcs-reference";
