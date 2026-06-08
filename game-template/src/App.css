@@ -49,6 +49,16 @@ body {
   background: var(--bg-surface-main);
 }
 
+/* Back-to-arcade link: floats in the top-left corner over the shell on every
+   viewport, safe-area aware. Absolutely positioned so it never reflows the
+   game surface's dvh-based sizing. Look comes from Tailwind tokens on the <a>. */
+.arcade-back {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 10px);
+  left: calc(env(safe-area-inset-left, 0px) + 10px);
+  z-index: 30;
+}
+
 /* The swappable panel region (Play / Scores / Recent on mobile). */
 .panel-area {
   position: relative;

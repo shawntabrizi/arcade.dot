@@ -281,10 +281,23 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
       await ensureChainSubmit();
       const contract = gcsContract();
       if (!contract) throw new Error("GCS contract is not deployed (missing from cdm.json).");
-      // Dry-run at best-block; the dry-run's tx carries the gas + storage-deposit
-      // limits pallet_revive needs (preserved when nested in a batch).
+
+      // pallet_revive requires the SS58 origin to be mapped before a contract
+      // call (else AccountUnmapped). Each game uses its OWN per-app product
+      // account, so a player's FIRST save for a game is always unmapped — and a
+      // dry-run as that unmapped origin reverts AccountUnmapped *before* the
+      // batch below could map it. So check mapping FIRST, and when unmapped run
+      // the dry-run as a KNOWN-MAPPED origin (READ_ORIGIN = pallet-revive's
+      // pallet account) purely to obtain gas + storage-deposit limits.
+      // submitScore's cost is caller-agnostic (the on-chain caller is the
+      // extrinsic signer, not the dry-run origin), so the limits are valid; the
+      // real submit is signed by the player inside the batch.
+      const sdk = inkSdkBest();
+      if (!mapped) mapped = await sdk.addressIsMapped(connected.ss58);
+      const dryOrigin = mapped ? connected.ss58 : READ_ORIGIN;
+
       const dry = await contract.query("submitScore", {
-        origin: connected.ss58,
+        origin: dryOrigin,
         data: { score: BigInt(score) },
       });
       if (!dry.success) {
@@ -295,13 +308,10 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
         );
       }
 
-      // ONE host approval: pallet_revive requires the SS58 origin to be mapped
-      // before a contract call (else AccountUnmapped). When unmapped, batch
-      // map_account + the contract call into a single batch_all extrinsic so the
-      // player signs ONCE, not twice. map_account is one-time; once mapped (this
-      // session or already on-chain) we submit the call alone.
-      const sdk = inkSdkBest();
-      if (!mapped) mapped = await sdk.addressIsMapped(connected.ss58);
+      // ONE host approval: when unmapped, batch map_account + the contract call
+      // into a single batch_all extrinsic so the player signs ONCE. batch_all
+      // runs map_account first, so submitScore then executes as the now-mapped
+      // player. Once mapped, submit the call alone.
       const calls: BatchableCall[] = [];
       if (!mapped) calls.push(reviveApi().tx.Revive.map_account());
       calls.push(dry.value.send());

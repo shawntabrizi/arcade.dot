@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Gamepad2, Trophy, History } from "lucide-react";
-import { ActiveGame } from "./games/active";
+import { Gamepad2, Trophy, History, ChevronLeft } from "lucide-react";
+import { ActiveGame, ACTIVE_GAME_TITLE } from "./games/active";
 import type { ScoreEntry, ScoreOrdering } from "./scoreboard/api";
 import { Leaderboard, shortAddress } from "./scoreboard/Leaderboard";
 import { contractScoreboard, isContractDeployed } from "./scoreboard/reads";
@@ -16,6 +16,11 @@ import arcadeConfig from "../arcade.config.json";
 // The fake is referenced only on the FAKE_GATEWAY branch below; with the flag
 // unset, Vite tree-shakes it out of a normal build, which never imports a chain.
 const FAKE_GATEWAY = import.meta.env.VITE_ARCADE_FAKE_GATEWAY === "1";
+
+// Every arcade game links back to the discovery dashboard (imposed by the shell,
+// so every game gets it for free). Opens in-host via the validated cross-dApp
+// pattern (target=_blank to the .dot.li URL, §7.5). Override with VITE_ARCADE_URL.
+const ARCADE_URL = import.meta.env.VITE_ARCADE_URL || "https://arcade.dot.li";
 
 // ── Template configuration (SPEC §6.5 / §8.3 / §10.4) ───────────────────────
 // arcade.config.json is the single source of truth (SPEC §6.5). `requiresAccount`
@@ -322,6 +327,16 @@ export function App() {
 
   return (
     <div className="app-shell text-primary">
+      {/* Back to the arcade — imposed by the shell on every game, every viewport. */}
+      <a
+        className="arcade-back inline-flex items-center gap-1 rounded-full bg-surface-container text-secondary hover:text-primary px-3 py-1.5 text-[13px] font-medium no-underline transition-colors"
+        href={ARCADE_URL}
+        target="_blank"
+        rel="noopener"
+      >
+        <ChevronLeft className="w-4 h-4" />
+        Arcade
+      </a>
       <div className="panel-area">
         {/* ── Play panel ──────────────────────────────────────────────── */}
         <section
@@ -332,7 +347,7 @@ export function App() {
           <div className="flex flex-col items-center gap-3 w-full max-w-[420px]">
             <header className="text-center w-full">
               <h1 className="text-2xl font-semibold tracking-tight text-primary m-0 mb-1">
-                Arcade Game Template
+                {ACTIVE_GAME_TITLE}
               </h1>
               {statusLine}
             </header>

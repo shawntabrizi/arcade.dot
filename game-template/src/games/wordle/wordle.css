@@ -1,0 +1,189 @@
+/* Wordle fills the shell-provided .game-surface (App.css owns the 2:3 frame,
+   radius, shadow, and sizing). This file styles ONLY the gameplay inside the
+   surface. The root just fills its parent (width/height: 100%). */
+.wordle-root {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  background: #0f1117;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.wordle-title {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 8px 0 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.wordle-message {
+  min-height: 20px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+  padding: 4px 8px;
+}
+
+/* The board area grows to fill space between title and keyboard. */
+.wordle-board {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px;
+  min-height: 0;
+}
+
+.wordle-row {
+  display: flex;
+  gap: 5px;
+}
+
+.wordle-tile {
+  width: clamp(34px, 13vw, 56px);
+  height: clamp(34px, 13vw, 56px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(18px, 6vw, 28px);
+  font-weight: 800;
+  text-transform: uppercase;
+  border: 2px solid #3a3c42;
+  box-sizing: border-box;
+  border-radius: 4px;
+  color: #fff;
+}
+
+.wordle-tile.filled {
+  border-color: #6b6f78;
+}
+
+.wordle-tile.correct {
+  background: #538d4e;
+  border-color: #538d4e;
+}
+
+.wordle-tile.present {
+  background: #b59f3b;
+  border-color: #b59f3b;
+}
+
+.wordle-tile.absent {
+  background: #3a3c42;
+  border-color: #3a3c42;
+}
+
+/* On-screen keyboard (DOM) — works on mobile; physical keyboard also accepted. */
+.wordle-keyboard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px 10px;
+}
+
+.wordle-krow {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  width: 100%;
+}
+
+.wordle-key {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 40px;
+  height: clamp(40px, 11vw, 52px);
+  border: none;
+  border-radius: 4px;
+  background: #818384;
+  color: #fff;
+  font-size: clamp(11px, 3.5vw, 15px);
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 0;
+}
+
+.wordle-key.wide {
+  max-width: 64px;
+  flex: 1.5 1 auto;
+  font-size: clamp(9px, 3vw, 12px);
+}
+
+.wordle-key.correct {
+  background: #538d4e;
+}
+
+.wordle-key.present {
+  background: #b59f3b;
+}
+
+.wordle-key.absent {
+  background: #3a3c42;
+}
+
+.wordle-key:active {
+  filter: brightness(1.2);
+}
+
+.wordle-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+  background: rgba(15, 17, 23, 0.92);
+}
+
+.wordle-root {
+  position: relative;
+}
+
+.wordle-overlay-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.wordle-overlay-sub {
+  margin: 0;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.wordle-overlay-answer {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #538d4e;
+}
+
+.wordle-button {
+  margin-top: 4px;
+  background: #fff;
+  color: #222;
+  border: none;
+  padding: 12px 28px;
+  border-radius: 999px;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+}

@@ -1,0 +1,126 @@
+/* The game's root fills the shell-provided .game-surface (App.css owns the
+   responsive 2:3 frame, radius, and shadow). 2048 styles only its own content
+   below — HUD, board grid, tiles, overlay. */
+.g2048-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #0d1320;
+  display: flex;
+  flex-direction: column;
+  touch-action: none;
+}
+
+.g2048-hud {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  padding-top: 14px;
+  pointer-events: none;
+}
+
+.g2048-score {
+  font-size: 36px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow:
+    -2px 0 0 #000,
+    2px 0 0 #000,
+    0 -2px 0 #000,
+    0 2px 0 #000;
+  letter-spacing: 0.04em;
+}
+
+.g2048-board {
+  flex: 1 1 auto;
+  margin: 14px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 8px;
+  background: #1b2336;
+  border-radius: 10px;
+  padding: 8px;
+  /* Keep the play area square within the portrait surface. */
+  aspect-ratio: 1 / 1;
+  align-self: center;
+  width: calc(100% - 28px);
+  max-height: calc(100% - 28px);
+  max-width: calc((100vh - 28px));
+}
+
+.g2048-cell {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  position: relative;
+}
+
+.g2048-tile {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-weight: 800;
+  font-size: clamp(16px, 6vmin, 30px);
+  color: #f7f4ef;
+  background: #3a3f5a;
+}
+
+/* Tile colors — warm progression like the classic game, tuned for the dark shell. */
+.g2048-tile-2 { background: #4a4e69; color: #ede0d4; }
+.g2048-tile-4 { background: #5a5680; color: #ede0d4; }
+.g2048-tile-8 { background: #e08f5a; color: #fff; }
+.g2048-tile-16 { background: #e57b3f; color: #fff; }
+.g2048-tile-32 { background: #ef6a45; color: #fff; }
+.g2048-tile-64 { background: #f15a2b; color: #fff; }
+.g2048-tile-128 { background: #f0c14b; color: #fff; font-size: clamp(14px, 5vmin, 26px); }
+.g2048-tile-256 { background: #f0bb3a; color: #fff; font-size: clamp(14px, 5vmin, 26px); }
+.g2048-tile-512 { background: #f0b22a; color: #fff; font-size: clamp(14px, 5vmin, 26px); }
+.g2048-tile-1024 { background: #f0a91a; color: #fff; font-size: clamp(12px, 4vmin, 22px); }
+.g2048-tile-2048 { background: #f09a0a; color: #fff; font-size: clamp(12px, 4vmin, 22px); }
+.g2048-tile-super { background: #2bb56a; color: #fff; font-size: clamp(11px, 3.5vmin, 20px); }
+
+.g2048-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.g2048-gameover {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  background: rgba(0, 0, 0, 0.65);
+  padding: 28px 32px;
+  border-radius: 14px;
+}
+
+.g2048-gameover-title {
+  margin: 0;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.g2048-retry {
+  background: #fff;
+  color: #222;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 999px;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+
+.g2048-retry:hover {
+  transform: translateY(-1px);
+}
