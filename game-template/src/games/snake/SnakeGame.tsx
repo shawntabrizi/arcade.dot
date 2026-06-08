@@ -227,7 +227,7 @@ export function SnakeGame({ onGameEnd }: GameComponentProps) {
         }}
       />
       <div className="snake-overlay">
-        {phase === "ready" && <p>Arrow keys / WASD to start</p>}
+        {phase === "ready" && <p>Swipe or arrow keys to start</p>}
         {phase === "dead" && (
           <button type="button" onClick={reset} className="snake-retry">
             Play again
