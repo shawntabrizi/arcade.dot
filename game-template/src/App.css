@@ -80,6 +80,32 @@ body {
   padding: 12px;
 }
 
+/* ── Game surface (shell-owned) ─────────────────────────────────────────────
+   The portrait frame every game drops into. The shell imposes the responsive
+   2:3 box (scales to fit tall AND small phones, capped to the available area),
+   the radius, and the shadow. A game component just fills 100% of this surface
+   (width/height:100%) and styles only its own gameplay — it cannot re-implement
+   or fight the layout. The canvas internal resolution is the game's business;
+   only the displayed box scales. Desktop caps it at the original 360×540. */
+.game-surface {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  height: min(540px, calc(100dvh - 180px));
+  width: auto;
+  max-width: 100%;
+  border-radius: var(--radius-nested);
+  overflow: hidden;
+  box-shadow: var(--shadow-2);
+  user-select: none;
+}
+
+@media (min-width: 760px) {
+  .game-surface {
+    height: 540px;
+    width: 360px;
+  }
+}
+
 /* ── Bottom tab bar (mobile only) ──────────────────────────────────────── */
 .tab-bar {
   flex: 0 0 auto;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ScoreboardAPI, ScoreEntry } from "./api";
+import type { ScoreboardAPI, ScoreEntry, ScoreOrdering } from "./api";
 
 interface Props {
   api: ScoreboardAPI;
@@ -8,6 +8,18 @@ interface Props {
   limit?: number;
   /** Optimistic just-played entry, merged in before the real fetch lands. */
   pendingEntry?: ScoreEntry | null;
+  /**
+   * SPEC §4.2 score ordering: 0 = higher is better (default), 1 = lower is
+   * better. Drives the top-list sort and what counts as a personal best for
+   * the optimistic upsert, so lower-is-better genres rank correctly in-game.
+   */
+  ordering?: ScoreOrdering;
+}
+
+// A is "better than" B under the given ordering. Higher-is-better (0) ranks the
+// larger score first; lower-is-better (1) ranks the smaller score first.
+function isBetter(a: number, b: number, ordering: ScoreOrdering): boolean {
+  return ordering === 1 ? a < b : a > b;
 }
 
 export function shortAddress(addr: string): string {
@@ -25,20 +37,25 @@ function relativeTime(unixSeconds: number): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-// Top list: upsert the optimistic entry by player keeping the higher score
-// (the contract stores the personal best), then re-sort + trim.
-function withPendingTop(
+// Top list: upsert the optimistic entry by player keeping the BETTER score
+// under the ordering (the contract stores the personal best), then re-sort +
+// trim. Sort descending for higher-is-better (0), ascending for lower (1).
+export function withPendingTop(
   scores: ScoreEntry[],
   pending: ScoreEntry | null | undefined,
   limit: number,
+  ordering: ScoreOrdering = 0,
 ): ScoreEntry[] {
-  if (!pending) return scores;
   const byPlayer = new Map(scores.map((e) => [e.player.toLowerCase(), e]));
-  const existing = byPlayer.get(pending.player.toLowerCase());
-  if (!existing || pending.score > existing.score) {
-    byPlayer.set(pending.player.toLowerCase(), pending);
+  if (pending) {
+    const existing = byPlayer.get(pending.player.toLowerCase());
+    if (!existing || isBetter(pending.score, existing.score, ordering)) {
+      byPlayer.set(pending.player.toLowerCase(), pending);
+    }
   }
-  return [...byPlayer.values()].sort((a, b) => b.score - a.score).slice(0, limit);
+  return [...byPlayer.values()]
+    .sort((a, b) => (ordering === 1 ? a.score - b.score : b.score - a.score))
+    .slice(0, limit);
 }
 
 // Recent list: prepend the optimistic play unless the freshest fetched entry is
@@ -62,6 +79,7 @@ export function Leaderboard({
   highlightPlayer,
   limit = 10,
   pendingEntry,
+  ordering = 0,
 }: Props) {
   const [scores, setScores] = useState<ScoreEntry[]>([]);
   const [recent, setRecent] = useState<ScoreEntry[]>([]);
@@ -86,8 +104,8 @@ export function Leaderboard({
   }, [api, refreshKey, limit]);
 
   const topDisplayed = useMemo(
-    () => withPendingTop(scores, pendingEntry, limit),
-    [scores, pendingEntry, limit],
+    () => withPendingTop(scores, pendingEntry, limit, ordering),
+    [scores, pendingEntry, limit, ordering],
   );
   const recentDisplayed = useMemo(
     () => withPendingRecent(recent, pendingEntry, limit),

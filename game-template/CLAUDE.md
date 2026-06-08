@@ -1,9 +1,14 @@
 # CLAUDE.md — agent instructions for the Polkadot Arcade game template
 
-You are an AI agent editing this template to build and ship one game to the
-Polkadot Arcade. The canonical prompt is:
+You are an AI agent using this template to build and ship **any** single-player
+game to the Polkadot Arcade. The canonical prompt is:
 
-> *"Edit the game template for the &lt;X&gt; game and deploy it to the arcade."*
+> *"Build &lt;X&gt; as a new game in this template and deploy it to the arcade."*
+
+You are **not** editing Snake. Snake is one of two reference games; you write a
+**new** game component and point the template at it. Chain, identity, signing,
+and styling are **imposed by the template** — you write only the gameplay
+component and `arcade.config.json`.
 
 This file tells you exactly how to succeed unaided. `AGENTS.md` points here —
 this is the single source of agent guidance. Read it top to bottom before you
@@ -15,15 +20,17 @@ start; the steps and the failure modes are not optional.
 
 You do three things, in this order:
 
-1. **Write the game** as a React component behind one seam (§1).
+1. **Build the game** as a new React component behind one seam, then point the
+   active-game re-export at it (§1).
 2. **Fill `arcade.config.json`** — the single source of truth for everything
-   the arcade displays and the contract is constructed with (§2).
+   the arcade displays and the contract is constructed with (§2), using the
+   score-semantics decision table (§2.1).
 3. **Run the deploy pipeline** in exact order (§3), handling the failure modes
    (§4) honestly.
 
-You do **not** touch the scoreboard/identity layer or the pipeline library
-(§6). The whole design exists so a new game is one component plus one config
-file.
+You do **not** touch the scoreboard/identity layer, the shell/styling, or the
+pipeline library (§6). The whole design exists so a new game is one component
+plus one config file.
 
 ---
 
@@ -38,31 +45,53 @@ export interface GameComponentProps {
 }
 ```
 
-Rules — all three are load-bearing:
+Rules — all load-bearing:
 
-1. The component renders its own UI (canvas, DOM, anything) and runs its own
-   logic. It knows **nothing** about chains, accounts, storage, or the player.
+1. The component **renders only gameplay** into the shell-provided surface. Its
+   root element fills its parent (`width: 100%; height: 100%`); the shell owns
+   the responsive 2:3 portrait frame, the radius, the shadow, and the
+   mobile/desktop layout (see §2.2). The component runs its own logic and knows
+   **nothing** about chains, accounts, storage, or the player.
 2. It calls **`onGameEnd(score)` exactly once per match.** `score` is a
-   non-negative integer (`u128` on-chain — round before calling). One call
-   drives at most one on-chain `submitScore`; a second call is a second
-   submission (a real transaction). Gate the callback behind a "has-ended"
-   flag — see `SnakeGame.tsx`'s `s.ended` guard for the pattern.
-3. It MUST NOT import from `src/scoreboard/`. Score persistence is someone
-   else's problem.
+   **non-negative integer** (`u128` on-chain — `Math.round` / `Math.max(0, …)`
+   before calling). One call drives at most one on-chain `submitScore`; a second
+   call is a second submission (a real transaction). Gate the callback behind a
+   "has-ended" flag — see `SnakeGame.tsx`'s `s.ended` guard or `AimTrainer.tsx`'s
+   `endedRef` for the pattern.
+3. It **MUST NOT** import from `src/scoreboard/`, from `App`, or from any shell
+   file. Score persistence, identity, and layout are someone else's problem.
+4. **Guest-first, zero chain during play.** The component never connects a
+   wallet, reads, or writes the chain. A guest plays freely; the template
+   handles the sign-in nudge at game over. Don't add login or storage.
 
-To swap in your game:
+To wire your game in:
 
-- Put it under `src/games/<your-game>/<YourGame>.tsx`.
-- In `src/App.tsx` change the one import and the one JSX usage of `SnakeGame`.
-  That is the **only** edit `App.tsx` needs for a game swap. Do not rewire the
-  scoreboard plumbing around it.
+- Put it under `src/games/<your-game>/<YourGame>.tsx` (+ a CSS file for your
+  gameplay if you need one).
+- Point the **one swap point** at it: edit `src/games/active.ts` to re-export
+  your component as `ActiveGame` and set `ACTIVE_GAME_TITLE`:
 
-The shipped `SnakeGame` is the reference: canvas + keyboard, a single
-`onGameEnd(s.score)` call inside a `die()` guarded by `s.ended`.
+  ```ts
+  export { YourGame as ActiveGame } from "./your-game/YourGame";
+  export const ACTIVE_GAME_TITLE = "Your Game";
+  ```
 
-`docs/modding.md` → "Swap the game" has a fuller recipe and the common
-pitfalls (double `onGameEnd`, firing from `useEffect` cleanup, fractional
-scores). Follow it; don't reinvent it.
+  `App.tsx` imports `ActiveGame` from there and renders it inside the
+  `.game-surface` wrapper. **You do not edit `App.tsx`** for a game swap — that
+  is the entire point of `active.ts`. Do not rewire the scoreboard plumbing.
+
+### The two reference games — copy the one whose shape matches
+
+- **`src/games/snake/SnakeGame.tsx`** — **keyboard + swipe**, **canvas**
+  rendering, **higher-is-better** score (points). A single `onGameEnd(s.score)`
+  inside a `die()` guarded by `s.ended`.
+- **`src/games/aim-trainer/AimTrainer.tsx`** — **tap (DOM/pointer)** input,
+  **DOM** rendering, **lower-is-better** score = reaction time in
+  **milliseconds** (duration). `onGameEnd(avgMs)` once, guarded by `endedRef`.
+  Use this as the model for any pointer/DOM or lower-is-better game.
+
+`docs/modding.md` → "Build a new game" has a fuller recipe and the common
+pitfalls. Follow it; don't reinvent it.
 
 ---
 
@@ -99,6 +128,57 @@ CID or a contract address by hand.** Fill it completely before deploying.
 `scoreOrdering`/`scoreFormat`/`scoreUnit` are passed to the GCS contract's
 constructor at deploy time and are then fixed forever — get them right before
 step 4. `requiresAccount` must also match how your game actually behaves.
+
+### 2.1 Score-semantics decision table
+
+`scoreOrdering` and `scoreFormat` are **immutable for the contract's life**, so
+pick them from the game's genre before you deploy. Match your game to the
+closest row:
+
+| Genre | `scoreOrdering` | `scoreFormat` | `scoreUnit` | Why |
+|---|---|---|---|---|
+| Flappy Bird (points) | `0` | `0` | `""` | more points = better |
+| 2048 (points) | `0` | `0` | `""` | higher tile sum = better |
+| Clicker (count) | `0` | `0` | `""` | more clicks = better |
+| Solitaire by moves | `1` | `2` | `"moves"` | fewer moves = better; custom unit |
+| Aim trainer (reaction) | `1` | `1` | `""` | lower ms = better; duration render |
+| Wordle by guesses | `1` | `2` | `"guesses"` | fewer guesses = better; custom unit |
+
+Rules of thumb: **higher-is-better → `scoreOrdering: 0`; faster/fewer → `1`.**
+Use `scoreFormat: 1` only when the submitted number is **milliseconds** (it
+renders `m:ss.mmm`). Use `scoreFormat: 2` + a `scoreUnit` for any other
+non-points unit (moves, guesses, laps); use `0` for plain points and leave
+`scoreUnit` empty. The in-game leaderboard already sorts by `scoreOrdering`
+(higher genres descending, lower genres ascending) — you don't sort anything.
+
+### 2.2 Styling is imposed — don't restyle the shell
+
+The look is **structural**, not yours to change. The template provides the
+**2:3 portrait game surface**, the **mobile/desktop layout**, the **bottom tab
+bar**, and the **game-over save sheet**. Your game component fills 100% of the
+surface and styles **only its own gameplay inside it**.
+
+- **Do not** edit `src/App.css`, `src/tokens.css`, `tailwind.config.js`, the
+  shell in `src/App.tsx`, the tab bar, or the save sheet.
+- **Do not** re-create the portrait frame, radius, shadow, or any
+  viewport/`dvh` sizing in your game CSS — the shell's `.game-surface` owns it.
+  Your root just fills its parent.
+- Swap the game **only** via `src/games/active.ts` (§1). Any game dropped into
+  the surface inherits the frame and the mobile/desktop layout and cannot fight
+  it — Snake (canvas) and AimTrainer (DOM/tap) both prove this with no per-game
+  layout code.
+
+### 2.3 Supported game shapes
+
+This template ships **one** number per match to a single-player leaderboard.
+Supported: a self-contained session that **ends with one integer score**
+(points, a count, a duration in ms, a move/guess count). Snake and AimTrainer
+bracket the range (canvas/keyboard/higher ↔ DOM/tap/lower).
+
+**Not supported** (don't attempt within this template): multiplayer / realtime
+versus, persistent cross-session state or save games, multi-statistic scoring
+(more than one number per match), or anything that needs chain state during
+play. Those need contract/SPEC changes outside the game seam.
 
 ---
 
@@ -157,6 +237,32 @@ Notes on individual steps:
 ---
 
 ## 4. Common failure modes — and the fix (do NOT work around)
+
+### 4.0 Game-component failure modes (check these first)
+
+- **Game won't render / blank surface.** The component's root must fill its
+  parent (`width: 100%; height: 100%`) — the shell sizes `.game-surface`, not
+  the game. Don't set a fixed pixel size or your own `dvh`/`aspect-ratio`; that
+  fights the shell. Verify the boot test (`npm run test:boot`) still renders
+  `#root` non-empty.
+- **`onGameEnd` never fires** → the game is unbeatable / the leaderboard never
+  updates. Make sure every terminal path (death, win, time-up, last target)
+  calls `onGameEnd` once. Don't fire it from `useEffect` cleanup (cleanups run
+  on unmount and prop changes — a double-fire).
+- **`onGameEnd` fires more than once** → duplicate `submitScore` transactions.
+  Guard with a "has-ended" flag (`s.ended` / `endedRef`) checked at the top of
+  your end function.
+- **Non-integer or negative score** → the on-chain `u128` write is malformed.
+  `Math.round` and `Math.max(0, …)` before calling `onGameEnd`. A timer game
+  submits **whole milliseconds**.
+- **Game renders outside the surface** (overlapping the header/tabs, ignoring
+  the frame). You styled layout instead of gameplay — remove any frame/size CSS
+  and let your root fill `.game-surface` (§2.2).
+- **Wrong leaderboard order in-game** → `scoreOrdering` in `arcade.config.json`
+  doesn't match the genre (§2.1). The board sorts by it; fix the config, don't
+  sort in the game.
+
+### 4.1 Pipeline / deploy failure modes
 
 - **No playground session / not logged in.** Step 6 (and any signing the CLI
   does) fails for lack of a session. **Tell the user to run `playground init`**
@@ -225,11 +331,17 @@ not the registry, filters junk.
 - **The scoreboard / identity layer** (`src/scoreboard/`): `gateway.ts` (the
   `ChainGateway` seam), `scoreboard.ts` (the guest/sign-in policy), `gcs.ts`,
   `reads.ts`, `sdk-gateway.ts` (the real product-sdk wiring), `api.ts`,
-  `Leaderboard.tsx`. This implements SPEC §8 identity once for every template
-  game — guest mode, the game-over "sign in to save your score" nudge, account
-  mapping, `submitScore`. Do not reintroduce burner keys, a faucet,
-  `//Alice`-as-a-player-signer, or any display-name identity (all removed per
-  SPEC §8; names come from the dashboard's DotNS resolution, §8.2).
+  `identifier.ts`, `Leaderboard.tsx`. This implements SPEC §8 identity once for
+  every template game — guest mode, the game-over "sign in to save your score"
+  nudge, account mapping, `submitScore`. Do not reintroduce burner keys, a
+  faucet, `//Alice`-as-a-player-signer, or any display-name identity (all
+  removed per SPEC §8; names come from the dashboard's DotNS resolution, §8.2).
+- **The shell & styling** — `src/App.tsx` (the composition root: panels, tab
+  bar, save sheet, `.game-surface` wrapper), `src/App.css`, `src/tokens.css`,
+  and `tailwind.config.js`. These impose the mobile/desktop layout and the
+  portrait game surface for every game (§2.2). You change the **active game**
+  through `src/games/active.ts` only; you do not edit `App.tsx` for a swap, and
+  you never restyle the shell or the tokens.
 - **The pipeline library** (`scripts/` and `scripts/lib/`). The config
   validator, listing assembly, chain helpers, and step runners are correct and
   tested — edit `arcade.config.json`, not the scripts.

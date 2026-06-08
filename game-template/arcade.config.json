@@ -1,4 +1,5 @@
 {
+  "_comment": "Single source of truth for the listing + contract constructor (CLAUDE.md §2). Build a new game by adding a component under src/games/ and pointing src/games/active.ts at it (the one swap point) — do NOT edit App.tsx. Styling is imposed: the shell provides the 2:3 portrait surface, mobile/desktop layout, tab bar, and save sheet; style only your gameplay. Set contract.scoreOrdering/scoreFormat/scoreUnit from the genre (CLAUDE.md §2.1) — they are immutable once deployed.",
   "name": "Snake",
   "gameType": "arcade",
   "shortDescription": "Classic Snake. Eat, grow, don't bite your tail. Each apple is a point — beat the leaderboard.",

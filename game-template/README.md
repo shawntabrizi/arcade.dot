@@ -1,8 +1,8 @@
 # Leaderboard Playground
 
-A Polkadot Playground starter template. A single-player game with an **on-chain leaderboard** — designed so the **game** and the **scoreboard backend** stay independent. Swap either one without touching the other.
+A Polkadot Playground starter template for shipping **any** single-player game with an **on-chain leaderboard**. You write only the gameplay component and one config file; chain, identity, signing, and styling are imposed by the template. The **game** and the **scoreboard backend** stay independent — swap either without touching the other.
 
-Ships with Snake as the game and a PVM smart contract on Paseo Asset Hub as the leaderboard backend.
+Ships with **two reference games** — Snake (keyboard+swipe / canvas / higher-is-better) and an Aim Trainer (tap / DOM / lower-is-better, ms) — and a PVM smart contract on Paseo Asset Hub as the leaderboard backend. Snake is the active game; point [`src/games/active.ts`](src/games/active.ts) at any component to swap.
 
 ## What you need
 
@@ -111,11 +111,15 @@ The flow lives in the scoreboard layer (`src/scoreboard/`):
 
 The single chain seam is `ChainGateway` ([`src/scoreboard/gateway.ts`](src/scoreboard/gateway.ts)); the real product-sdk wiring is isolated in [`src/scoreboard/sdk-gateway.ts`](src/scoreboard/sdk-gateway.ts). Player display names are the dashboard's job (DotNS reverse resolution, SPEC §8.2); in-game the board shows truncated H160 addresses.
 
-## Swap the game
+## Build a new game
 
-A game is a React component that calls `onGameEnd(score)` exactly once when the match ends. Drop in any single-player game that produces a number — 2048, Snake, a clicker, a reaction-time test.
+A game is a React component that calls `onGameEnd(score)` exactly once (a non-negative integer) when the match ends, and renders only its gameplay into the shell-provided portrait surface. Drop in any single-player game that produces a number — Flappy Bird, 2048, a clicker, an aim trainer, Wordle.
 
-See [`docs/modding.md`](docs/modding.md) → "Swap the game" for the recipe.
+**Styling is imposed.** The shell provides the responsive 2:3 portrait game surface, the mobile/desktop layout, the bottom tab bar, and the game-over save sheet. Your component fills 100% of the surface and styles only its own gameplay — don't restyle the shell, tokens, or `App.css`.
+
+**One swap point.** Point [`src/games/active.ts`](src/games/active.ts) at your component (`ActiveGame` + `ACTIVE_GAME_TITLE`); `App.tsx` needs no edit. The template ships two reference games to copy — `snake/SnakeGame` (canvas/keyboard/higher) and `aim-trainer/AimTrainer` (DOM/tap/lower).
+
+See [`docs/modding.md`](docs/modding.md) → "Build a new game" for the full recipe, the score-semantics table, and the shell-surface contract.
 
 ## Swap the backend
 
@@ -139,9 +143,13 @@ src/
 ├── main.tsx
 ├── games/
 │   ├── types.ts                  # GameComponentProps — the game contract
-│   └── snake/
-│       ├── SnakeGame.tsx         # the shipped game
-│       └── snake.css
+│   ├── active.ts                 # the one swap point (re-exports ActiveGame)
+│   ├── snake/
+│   │   ├── SnakeGame.tsx         # reference: canvas/keyboard/higher (active)
+│   │   └── snake.css
+│   └── aim-trainer/
+│       ├── AimTrainer.tsx        # reference: DOM/tap/lower (ms)
+│       └── aim-trainer.css
 └── scoreboard/
     ├── api.ts                    # ScoreboardAPI — the backend contract
     ├── gateway.ts                # ChainGateway — the one chain seam
@@ -161,7 +169,7 @@ Convention files for the playground registry: [`template.json`](template.json), 
 
 See [`quests.json`](quests.json) for the full list. Highlights:
 
-- **Swap the game** — anything producing a numeric score plugs in.
+- **Build a new game** — anything producing a single integer score plugs in via `src/games/active.ts`.
 - **Bulletin replay history** — store full match history off-chain, content-addressed; contract holds the index.
 - **Custom read backend** — anything implementing `ScoreboardAPI` is a drop-in for the in-game board.
 

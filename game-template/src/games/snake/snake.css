@@ -1,24 +1,10 @@
+/* The game's root fills the shell-provided .game-surface (App.css owns the
+   responsive 2:3 frame, radius, and shadow). Snake styles only its own content
+   below — canvas, HUD, overlay. */
 .snake-wrap {
   position: relative;
-  /* Portrait 2:3 box that scales to fit the viewport on tall AND small phones
-     while staying portrait. The canvas internal resolution stays 360×540; only
-     the displayed box scales. Height is capped to the available area; width is
-     derived from the 2/3 aspect ratio. Desktop caps it at the original 360px. */
-  aspect-ratio: 2 / 3;
-  height: min(540px, calc(100dvh - 180px));
-  width: auto;
-  max-width: 100%;
-  border-radius: var(--radius-nested);
-  overflow: hidden;
-  box-shadow: var(--shadow-2);
-  user-select: none;
-}
-
-@media (min-width: 760px) {
-  .snake-wrap {
-    height: 540px;
-    width: 360px;
-  }
+  width: 100%;
+  height: 100%;
 }
 
 .snake-canvas {

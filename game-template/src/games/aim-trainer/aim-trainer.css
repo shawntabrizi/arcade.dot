@@ -1,0 +1,79 @@
+/* AimTrainer fills the shell-provided .game-surface (App.css owns the 2:3 frame,
+   radius, shadow). This file styles only the gameplay inside the surface. */
+.aim-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #0d1320;
+  touch-action: none;
+}
+
+.aim-hud {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow:
+    -2px 0 0 #000,
+    2px 0 0 #000,
+    0 -2px 0 #000,
+    0 2px 0 #000;
+  pointer-events: none;
+}
+
+.aim-target {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border: none;
+  border-radius: 999px;
+  background: radial-gradient(circle at 35% 35%, #ff8aa0, #ff5470 60%, #c81f43);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  padding: 0;
+}
+
+.aim-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  color: #fff;
+}
+
+.aim-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.aim-sub {
+  margin: 0;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.aim-button {
+  margin-top: 8px;
+  background: #fff;
+  color: #222;
+  border: none;
+  padding: 12px 28px;
+  border-radius: 999px;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+
+.aim-button:hover {
+  transform: translateY(-1px);
+}

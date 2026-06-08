@@ -8,7 +8,7 @@ Three folders, three responsibilities:
 
 - **`src/games/`** — Whatever game you ship. Renders itself, runs its own logic, calls a single callback when a match ends. Knows nothing about storage, players, or the chain.
 - **`src/scoreboard/`** — The leaderboard layer. Defines an interface (`ScoreboardAPI`), provides two implementations (`contractScoreboard` is the default, `localScoreboard` is an offline alternative), and renders the leaderboard UI. Knows nothing about which game produced the scores.
-- **`src/App.tsx`** — The only file that wires a specific game to a specific scoreboard implementation. Everything that connects the two layers happens here.
+- **`src/App.tsx`** — The composition root: it wires the active game to the scoreboard and imposes the shell (the portrait game surface, the mobile/desktop layout, the bottom tab bar, the save sheet). You do **not** edit it to swap games — that happens in `src/games/active.ts` (one re-export line).
 
 The smart contract sits behind the scoreboard layer:
 
@@ -18,9 +18,9 @@ That's the whole architecture. Two interfaces (`GameComponentProps`, `Scoreboard
 
 ---
 
-## Swap the game
+## Build a new game
 
-Replace Snake with anything that produces a numeric score — 2048, Flappy Bird, a clicker, a reaction-time test. Anything that ends with a single number is a fit.
+Build any single-player game that produces a numeric score — Flappy Bird, 2048, a clicker, an aim trainer, Wordle. Anything that ends with a single integer is a fit. You write a new component and point the template at it; you do not edit Snake.
 
 ### The contract
 
@@ -32,70 +32,96 @@ export interface GameComponentProps {
 }
 ```
 
-Three rules for a game component:
+Rules for a game component:
 
-1. It renders its own UI (canvas, DOM, whatever — your call).
-2. It calls `onGameEnd(score)` **exactly once** when the match ends.
-3. It does not import from `src/scoreboard/`. Score persistence is somebody else's problem.
+1. It **renders only gameplay** into the shell-provided surface (see "The shell surface" below). Its root fills 100% of its parent; the shell owns the frame and layout.
+2. It calls `onGameEnd(score)` **exactly once** when the match ends, with a **non-negative integer**.
+3. It does not import from `src/scoreboard/`, from `App`, or from the shell. Score persistence, identity, and layout are somebody else's problem.
+
+### The shell surface (styling is imposed)
+
+The shell provides a responsive **2:3 portrait surface** (`.game-surface` in `src/App.css`), plus the mobile/desktop layout, the bottom tab bar, and the game-over save sheet. Your component fills 100% of the surface and styles **only its own gameplay**:
+
+```css
+.your-game-root {
+  width: 100%;
+  height: 100%;
+}
+```
+
+Do **not** edit `src/App.css`, `src/tokens.css`, `tailwind.config.js`, or the shell in `src/App.tsx`, and do **not** re-create the frame / radius / shadow / `dvh` sizing in your game CSS — the surface owns all of it. Any game drops into the surface and inherits the layout (Snake uses a canvas; AimTrainer uses tapped DOM targets — neither has layout code of its own).
+
+### The two reference games
+
+Copy whichever shape matches your game:
+
+- **`src/games/snake/SnakeGame.tsx`** — keyboard + swipe input, **canvas** rendering, **higher-is-better** points. `onGameEnd(s.score)` once, guarded by `s.ended`.
+- **`src/games/aim-trainer/AimTrainer.tsx`** — **tap (DOM/pointer)** input, DOM rendering, **lower-is-better** = reaction time in **milliseconds**. `onGameEnd(avgMs)` once, guarded by `endedRef`.
 
 ### The recipe
 
-1. **Create the game file.** Put it under `src/games/<your-game>/<YourGame>.tsx`. A skeleton:
+1. **Create the game file.** Put it under `src/games/<your-game>/<YourGame>.tsx` (plus a CSS file for your gameplay if you need one). A skeleton:
 
    ```tsx
-   import { useState } from "react";
+   import { useRef, useState } from "react";
    import type { GameComponentProps } from "../types";
 
    export function ClickerGame({ onGameEnd }: GameComponentProps) {
      const [clicks, setClicks] = useState(0);
-     const [done, setDone] = useState(false);
+     const ended = useRef(false);
+
+     function finish() {
+       if (ended.current) return; // exactly-once guard
+       ended.current = true;
+       onGameEnd(clicks); // already a non-negative integer
+     }
 
      return (
-       <div>
+       <div style={{ width: "100%", height: "100%" }}>
          <p>Clicks: {clicks}</p>
-         {!done && (
-           <button
-             onClick={() => setClicks((c) => c + 1)}
-             onDoubleClick={() => {
-               setDone(true);
-               onGameEnd(clicks);
-             }}
-           >
-             Click me (double-click to finish)
-           </button>
-         )}
+         <button onClick={() => setClicks((c) => c + 1)}>Click me</button>
+         <button onClick={finish}>Finish</button>
        </div>
      );
    }
    ```
 
-2. **Wire it up.** In `src/App.tsx`, change one import and one JSX line:
+2. **Point the swap point at it.** Edit `src/games/active.ts` (one re-export line):
 
    ```diff
-   - import { SnakeGame } from "./games/snake/SnakeGame";
-   + import { ClickerGame } from "./games/clicker/ClickerGame";
-
-   - <SnakeGame onGameEnd={onGameEnd} />
-   + <ClickerGame onGameEnd={onGameEnd} />
+   - export { SnakeGame as ActiveGame } from "./snake/SnakeGame";
+   - export const ACTIVE_GAME_TITLE = "Snake";
+   + export { ClickerGame as ActiveGame } from "./clicker/ClickerGame";
+   + export const ACTIVE_GAME_TITLE = "Clicker";
    ```
 
-That's the whole swap. The leaderboard, player input, and storage layer are unchanged.
+That's the whole swap. `App.tsx` renders `ActiveGame` inside `.game-surface`; the leaderboard, player input, and storage layer are unchanged. **You never edit `App.tsx` for a game swap.**
+
+### Score semantics — pick before you deploy
+
+`scoreOrdering` and `scoreFormat` in `arcade.config.json` are immutable for the contract's life, so set them from the genre. The in-game leaderboard already sorts by `scoreOrdering` — you never sort in the game.
+
+| Genre | `scoreOrdering` | `scoreFormat` | `scoreUnit` |
+|---|---|---|---|
+| Flappy Bird (points) | `0` | `0` | `""` |
+| 2048 (points) | `0` | `0` | `""` |
+| Clicker (count) | `0` | `0` | `""` |
+| Solitaire by moves | `1` | `2` | `"moves"` |
+| Aim trainer (reaction ms) | `1` | `1` | `""` |
+| Wordle by guesses | `1` | `2` | `"guesses"` |
+
+Higher-is-better → `scoreOrdering: 0`; faster/fewer → `1`. Use `scoreFormat: 1` only when the number is milliseconds; `2` + a `scoreUnit` for other units; `0` for plain points.
+
+### Supported game shapes
+
+One **integer per match** to a single-player leaderboard — points, a count, a duration in ms, a move/guess count. **Not supported**: multiplayer/realtime versus, persistent cross-session state or saves, or multi-statistic scoring (more than one number per match). Those need contract/SPEC changes outside the game seam.
 
 ### Common pitfalls
 
 - **Calling `onGameEnd` more than once.** The leaderboard records every call as a score submission — and on the on-chain backend, every call is a transaction. Gate the callback behind a "has-ended" flag.
 - **Calling `onGameEnd` from inside `useEffect` cleanup.** Cleanups run on unmount and on prop changes — easy way to fire end-of-game twice.
-- **Submitting fractional scores.** The contract stores scores as `u128`. Round to integers in the game before calling `onGameEnd`, or convert in `App.tsx` before submission.
-
-### Game ideas that fit cleanly
-
-- **2048** — score = sum of merged tiles
-- **Snake** — score = food eaten
-- **Clicker** — score = clicks in a fixed time window
-- **Memory match** — score = `1000 - moves` (lower moves = higher score)
-- **Reaction time** — score = `max(0, 1000 - ms)`
-
-Anything that ends with a single number is a fit.
+- **Submitting fractional or negative scores.** The contract stores scores as `u128`. `Math.round` and `Math.max(0, …)` before calling `onGameEnd`.
+- **Re-creating the frame / sizing in your game CSS.** The shell surface owns it; your root just fills its parent (`width/height: 100%`).
 
 ---
 

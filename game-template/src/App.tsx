@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Gamepad2, Trophy, History } from "lucide-react";
-import { SnakeGame } from "./games/snake/SnakeGame";
-import type { ScoreEntry } from "./scoreboard/api";
+import { ActiveGame } from "./games/active";
+import type { ScoreEntry, ScoreOrdering } from "./scoreboard/api";
 import { Leaderboard, shortAddress } from "./scoreboard/Leaderboard";
 import { contractScoreboard, isContractDeployed } from "./scoreboard/reads";
 import { Scoreboard, type GameOverOutcome } from "./scoreboard/scoreboard";
@@ -29,6 +29,15 @@ const FAKE_GATEWAY = import.meta.env.VITE_ARCADE_FAKE_GATEWAY === "1";
 const REQUIRES_ACCOUNT = FAKE_GATEWAY
   ? globalThis.window?.__ARCADE_FAKE__?.config.requiresAccount === true
   : arcadeConfig.requiresAccount === true;
+
+// Score ordering (SPEC §4.2): 0 = higher is better, 1 = lower is better. The
+// single source is arcade.config.json's contract.scoreOrdering; the in-game
+// Leaderboard sorts by it so lower-is-better genres (aim trainer, solitaire by
+// moves) rank correctly. Under the test flag it comes from the per-test fake
+// config so e2e can drive the sort without a rebuild. Defaults to 0 (higher).
+const SCORE_ORDERING: ScoreOrdering = FAKE_GATEWAY
+  ? (globalThis.window?.__ARCADE_FAKE__?.config.ordering ?? 0)
+  : ((arcadeConfig.contract?.scoreOrdering as ScoreOrdering) ?? 0);
 
 const SCOREBOARD = contractScoreboard;
 // Under the test flag the (faked) contract is always "deployed" so the
@@ -356,7 +365,12 @@ export function App() {
               </div>
             ) : (
               <>
-                <SnakeGame onGameEnd={onGameEnd} />
+                {/* Shell-owned game surface: the responsive 2:3 portrait frame
+                    every game inherits. The active game fills 100% of it and
+                    cannot fight the layout (App.css `.game-surface`). */}
+                <div className="game-surface">
+                  <ActiveGame onGameEnd={onGameEnd} />
+                </div>
                 {lastScore !== null && (
                   <p className="text-sm text-secondary m-0">
                     Last score: <strong className="text-primary">{lastScore}</strong>
@@ -384,6 +398,7 @@ export function App() {
               refreshKey={refreshKey}
               highlightPlayer={player ?? undefined}
               pendingEntry={pendingEntry}
+              ordering={SCORE_ORDERING}
             />
           </div>
         </section>
