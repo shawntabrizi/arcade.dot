@@ -37,7 +37,7 @@ const CONTRACT_DEPLOYED = FAKE_GATEWAY || isContractDeployed();
 // per-game key on this origin.
 const GAME_KEY = getGcsAddress() ?? "local";
 
-type Phase = "playing" | "prompt" | "submitting" | "submitted" | "error";
+type Phase = "playing" | "confirm" | "prompt" | "submitting" | "submitted" | "error";
 
 export function App() {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -145,10 +145,8 @@ export function App() {
       try {
         const outcome: GameOverOutcome = await scoreboard.onGameEnd(score);
         switch (outcome.kind) {
-          case "submitted": // signed-in: submitted directly, no prompt
-            showOptimistic(score);
-            setPhase("submitted");
-            setRefreshKey((k) => k + 1);
+          case "confirm": // signed-in, new best → ask before signing
+            setPhase("confirm");
             break;
           case "prompt": // guest, worth keeping → "sign in to save your score"
             setPhase("prompt");
@@ -196,7 +194,7 @@ export function App() {
           <p className="tagline" data-session="signed-in">
             Signed in as{" "}
             <code title={session.account!.h160}>{shortAddress(session.account!.h160)}</code>
-            {" "}— scores save automatically.
+            {" "}— you&rsquo;ll be asked before saving a new best.
           </p>
         ) : session.inHost ? (
           <p className="tagline" data-session="in-host-guest">
@@ -243,6 +241,18 @@ export function App() {
               {phase === "submitted" && " · saved"}
               {!CONTRACT_DEPLOYED && " · contract not deployed"}
             </p>
+          )}
+
+          {phase === "confirm" && (
+            <div className="save-prompt">
+              <p>New best! Save your score?</p>
+              <button type="button" onClick={saveScore}>
+                Save score
+              </button>
+              <button type="button" className="ghost" onClick={onRestart}>
+                No thanks
+              </button>
+            </div>
           )}
 
           {phase === "prompt" && (

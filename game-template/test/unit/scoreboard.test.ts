@@ -177,17 +177,21 @@ describe("signed-in vs guest branching", () => {
     store = new FakeStore();
   });
 
-  it("signed-in player submits directly on game over, no prompt", async () => {
+  it("signed-in player: a new best asks to confirm and does NOT sign yet", async () => {
     const player = "0x00000000000000000000000000000000000000bb" as `0x${string}`;
     const { gateway, state } = fakeGateway({ ordering: 0, player });
     const sb = new Scoreboard(gateway, store, { gameKey: GAME_KEY });
     const out = await sb.onGameEnd(77);
-    expect(out).toEqual({ kind: "submitted", score: 77 });
+    // Ask before signing — no map/submit until the player taps Save.
+    expect(out).toEqual({ kind: "confirm", score: 77 });
+    expect(state.mappedCalls).toBe(0);
+    expect(state.submits).toEqual([]);
+    await sb.saveHeldScore(); // player confirms
     expect(state.mappedCalls).toBe(1);
     expect(state.submits).toEqual([77]);
   });
 
-  it("signed-in player submits even a non-improving score (every play counts)", async () => {
+  it("signed-in player: a non-improving score is ignored (no confirm, no signing)", async () => {
     const player = "0x00000000000000000000000000000000000000bb" as `0x${string}`;
     const { gateway, state } = fakeGateway({
       ordering: 0,
@@ -195,18 +199,20 @@ describe("signed-in vs guest branching", () => {
       bests: { [player.toLowerCase()]: 500 },
     });
     const sb = new Scoreboard(gateway, store, { gameKey: GAME_KEY });
-    const out = await sb.onGameEnd(10); // worse than 500
-    expect(out.kind).toBe("submitted");
-    expect(state.submits).toEqual([10]); // still submitted (SPEC §4.2)
+    const out = await sb.onGameEnd(10); // worse than 500 → not worth keeping
+    expect(out.kind).toBe("ignored");
+    expect(state.submits).toEqual([]); // never ask the player to sign for a non-best
   });
 });
 
 describe("submit-once semantics (SPEC §10.4)", () => {
-  it("one onGameEnd (signed-in) → exactly one submitScore", async () => {
+  it("one onGameEnd + confirm (signed-in) → exactly one submitScore", async () => {
     const player = "0x00000000000000000000000000000000000000bb" as `0x${string}`;
     const { gateway, state } = fakeGateway({ ordering: 0, player });
     const sb = new Scoreboard(gateway, new FakeStore(), { gameKey: GAME_KEY });
-    await sb.onGameEnd(5);
+    expect((await sb.onGameEnd(5)).kind).toBe("confirm");
+    expect(state.submits.length).toBe(0); // onGameEnd never signs
+    await sb.saveHeldScore();
     expect(state.submits.length).toBe(1);
   });
 

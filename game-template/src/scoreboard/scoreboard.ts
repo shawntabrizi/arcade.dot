@@ -17,8 +17,8 @@ export interface ScoreboardConfig {
 // decide what to show: a sign-in nudge (guest, worth keeping), a confirmed
 // submit (signed-in), or nothing (not worth keeping / no contract).
 export type GameOverOutcome =
-  | { kind: "submitted"; score: number } // signed-in: submitted directly
-  | { kind: "prompt"; score: number } // guest: worth keeping → "sign in to save"
+  | { kind: "confirm"; score: number } // signed-in, worth keeping → "Save your score?"
+  | { kind: "prompt"; score: number } // guest, worth keeping → "sign in to save"
   | { kind: "ignored"; score: number }; // not worth keeping (no prompt, no write)
 
 // SPEC §4.2 score ordering: 0 = higher is better, 1 = lower is better.
@@ -60,10 +60,11 @@ export function clearGuestBest(store: GuestStore, gameKey: string): void {
 // Orchestrates SPEC §8 identity policy over the narrow ChainGateway seam.
 // Holds no React state; the App composes it and reacts to outcomes.
 //
-// Submit-once semantics: the game calls onGameEnd(score) exactly once per match
-// (SPEC §10.4), and a single onGameEnd drives at most one submitScore — the
-// signed-in branch submits once; the guest branch defers to an explicit
-// saveHeldScore() the UI calls when the player accepts the nudge.
+// Submit-once + ask-before-signing: the game calls onGameEnd(score) exactly
+// once per match (SPEC §10.4). onGameEnd NEVER signs — it only decides what to
+// show. Both signed-in ("confirm") and guest ("prompt") defer the actual
+// signing to an explicit saveHeldScore() the UI calls when the player opts in,
+// so we never trigger a phone approval the player didn't ask for.
 export class Scoreboard {
   private readonly gateway: ChainGateway;
   private readonly store: GuestStore;
@@ -124,34 +125,34 @@ export class Scoreboard {
     return this.gateway.connect();
   }
 
-  // Single entry point for a finished match (one call per onGameEnd).
-  //   - signed in → ensureMapped + submitScore directly (no prompt).
-  //   - guest + worth keeping → persist locally, hold for save, return "prompt".
-  //   - guest + not worth keeping → return "ignored" (still no chain touch).
+  // Single entry point for a finished match (one call per onGameEnd). NEVER
+  // signs — only decides what to show; signing happens later in saveHeldScore.
+  //   - not worth keeping → "ignored" (no prompt, no chain touch, no signing).
+  //   - signed in + worth keeping → hold, return "confirm" ("Save your score?").
+  //   - guest + worth keeping → persist locally, hold, return "prompt".
+  // Gating on worth-keeping (a personal best) — even when signed in — means we
+  // never ask the player to sign for a score that wouldn't change the board.
   async onGameEnd(score: number): Promise<GameOverOutcome> {
     const ordering = await this.gateway.scoreOrdering();
-
-    if (this.isSignedIn()) {
-      // Signed-in players submit every play directly, no prompt: SPEC §4.2
-      // counts every play and a non-improving submitScore never reverts.
-      await this.submit(score);
-      return { kind: "submitted", score };
-    }
-
     const best = await this.knownBest();
     if (!isWorthKeeping(score, best, ordering)) {
       return { kind: "ignored", score };
     }
 
+    this.held = score;
+    if (this.isSignedIn()) {
+      // Ask before signing: no phone approval until the player taps Save.
+      return { kind: "confirm", score };
+    }
     // Guest, worth keeping: persist so it survives the session, hold for submit.
     writeGuestBest(this.store, this.gameKey, score);
-    this.held = score;
     return { kind: "prompt", score };
   }
 
-  // Called when a guest accepts the "sign in to save your score" nudge
-  // (SPEC §8.3). Connects → ensureAccountMapped → submitScore the held score.
-  // Idempotent against the held value; clears the guest hold on success.
+  // Called when the player opts in — a signed-in player tapping "Save your
+  // score?" (confirm), or a guest accepting the "sign in to save" nudge
+  // (SPEC §8.3). Connects if needed → ensureAccountMapped → submitScore the held
+  // score. Idempotent against the held value; clears the guest hold on success.
   async saveHeldScore(): Promise<void> {
     if (this.held === null) return;
     const score = this.held;

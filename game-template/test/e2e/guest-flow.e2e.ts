@@ -107,17 +107,36 @@ test("2. guest accepts sign-in → exactly ONE submitScore of the held score, pr
   await expect(page.locator(".leaderboard .is-you")).toHaveCount(2); // top list + recent list
 });
 
-test("3. signed-in player → game-over submits directly, exactly once, no prompt", async ({
+test("3. signed-in player → game-over ASKS before signing, then submits once on Save", async ({
   page,
 }) => {
   await boot(page, { ordering: 0, player: SIGNED_IN_PLAYER });
   await forceGameOver(page, 5);
 
-  // No nudge for a signed-in player.
+  // Ask-before-signing: a confirm prompt appears and NOTHING is submitted yet
+  // (no surprise phone approval). It's a "Save?", not the guest "Sign in" nudge.
+  await expect(page.getByText("New best! Save your score?")).toBeVisible();
   await expect(page.getByText("Sign in to save your score")).toBeHidden();
+  expect(await submits(page)).toEqual([]);
 
-  // Submitted directly, exactly once.
+  // Tapping Save submits exactly once.
+  await page.getByRole("button", { name: "Save score" }).click();
   await expect.poll(() => submits(page)).toEqual([5]);
+});
+
+test("3b. signed-in player → a non-improving score is ignored (no confirm, no submit)", async ({
+  page,
+}) => {
+  // Player already has an on-chain best of 50; a new 30 is not worth keeping.
+  await boot(page, {
+    ordering: 0,
+    player: SIGNED_IN_PLAYER,
+    bests: { [SIGNED_IN_PLAYER.toLowerCase()]: 50 },
+  });
+  await forceGameOver(page, 30);
+
+  await expect(page.getByText("New best! Save your score?")).toBeHidden();
+  expect(await submits(page)).toEqual([]);
 });
 
 test("4. requiresAccount=true gates at launch; play is blocked until sign-in", async ({ page }) => {
