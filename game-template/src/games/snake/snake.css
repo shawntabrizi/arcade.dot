@@ -1,11 +1,24 @@
 .snake-wrap {
   position: relative;
-  width: 360px;
-  height: 540px;
-  border-radius: 12px;
+  /* Portrait 2:3 box that scales to fit the viewport on tall AND small phones
+     while staying portrait. The canvas internal resolution stays 360×540; only
+     the displayed box scales. Height is capped to the available area; width is
+     derived from the 2/3 aspect ratio. Desktop caps it at the original 360px. */
+  aspect-ratio: 2 / 3;
+  height: min(540px, calc(100dvh - 180px));
+  width: auto;
+  max-width: 100%;
+  border-radius: var(--radius-nested);
   overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-2);
   user-select: none;
+}
+
+@media (min-width: 760px) {
+  .snake-wrap {
+    height: 540px;
+    width: 360px;
+  }
 }
 
 .snake-canvas {

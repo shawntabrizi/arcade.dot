@@ -1,0 +1,128 @@
+/* Polkadot design system tokens. Source: polkadot-design-system/references/
+   design-tokens.md. Semantic tokens only; mode = class on <html>
+   (.dark-elevated, applied in index.html). Do not add raw colors in components. */
+
+:root {
+  /* ── Primitive color scale (neutral) ── */
+  --color-neutral-white: #ffffff;
+  --color-neutral-50: #fafafa;
+  --color-neutral-100: #f5f5f5;
+  --color-neutral-150: #ebebeb;
+  --color-neutral-200: #e5e5e5;
+  --color-neutral-300: #d4d4d4;
+  --color-neutral-400: #a3a3a3;
+  --color-neutral-500: #737373;
+  --color-neutral-600: #525252;
+  --color-neutral-700: #404040;
+  --color-neutral-800: #262626;
+  --color-neutral-850: #1f1f1f;
+  --color-neutral-900: #171717;
+  --color-neutral-950: #0a0a0a;
+  --color-neutral-black: #000000;
+
+  /* ── fg tokens ── */
+  --fg-primary: var(--color-neutral-950);
+  --fg-primary-inverted: var(--color-neutral-100);
+  --fg-secondary: var(--color-neutral-600);
+  --fg-secondary-hover: var(--color-neutral-black);
+  --fg-secondary-inverted: var(--color-neutral-400);
+  --fg-tertiary: var(--color-neutral-500);
+  --fg-tertiary-inverted: var(--color-neutral-600);
+  --fg-static-white: var(--color-neutral-white);
+  --fg-link: #2563eb;
+  --fg-link-hover: #3b82f6;
+  --fg-error: #dc2626;
+  --fg-warning: #d97706;
+  --fg-success: #16a34a;
+
+  /* ── bg tokens ── */
+  --bg-surface-main: var(--color-neutral-50);
+  --bg-surface-container: var(--color-neutral-white);
+  --bg-surface-nested: var(--color-neutral-50);
+  --bg-surface-overlay: rgba(0, 0, 0, 0.48);
+  --bg-selection-container-hover: var(--color-neutral-50);
+  --bg-selection-container-active: var(--color-neutral-100);
+  --bg-action-primary: var(--color-neutral-black);
+  --bg-action-primary-hover: var(--color-neutral-850);
+  --bg-action-secondary: var(--color-neutral-100);
+  --bg-action-secondary-hover: var(--color-neutral-150);
+  --bg-status-error: #ef4444;
+  --bg-status-error-hover: #dc2626;
+  --bg-status-warning: #f59e0b;
+  --bg-status-warning-hover: #d97706;
+  --bg-accent: #3b82f6;
+
+  /* ── border tokens ── */
+  --border-default: var(--color-neutral-100);
+  --border-default-inverted: var(--color-neutral-800);
+  --border-error: #dc2626;
+  --border-warning: #d97706;
+  --border-success: #16a34a;
+  --border-divider: var(--color-neutral-100);
+  --border-divider-tint: var(--color-neutral-150);
+  --border-indicator: var(--color-neutral-300);
+
+  /* ── focus tokens ── */
+  --focus-ring: #000000;
+  --focus-error: #dc2626;
+
+  /* ── shadow conventions ── */
+  --shadow-1: 0 4px 24px -4px rgba(0, 0, 0, 0.16);
+  --shadow-2: 0 8px 32px -4px rgba(0, 0, 0, 0.24);
+  --shadow-3: 0 12px 48px -8px rgba(0, 0, 0, 0.24);
+
+  /* ── radius ── */
+  --radius-container: 16px;
+  --radius-nested: 12px;
+  --radius-small: 8px;
+  --radius-full: 9999px;
+}
+
+.dark {
+  --fg-primary: var(--color-neutral-100);
+  --fg-primary-inverted: var(--color-neutral-950);
+  --fg-secondary: var(--color-neutral-400);
+  --fg-secondary-hover: var(--color-neutral-150);
+  --fg-secondary-inverted: var(--color-neutral-600);
+  --fg-tertiary: var(--color-neutral-600);
+  --fg-tertiary-inverted: var(--color-neutral-500);
+  --fg-link: #3b82f6;
+  --fg-link-hover: #60a5fa;
+  --fg-error: #ef4444;
+  --fg-warning: #f59e0b;
+  --fg-success: #22c55e;
+
+  --bg-surface-main: var(--color-neutral-950);
+  --bg-surface-container: var(--color-neutral-900);
+  --bg-surface-nested: var(--color-neutral-850);
+  --bg-selection-container-hover: var(--color-neutral-850);
+  --bg-selection-container-active: var(--color-neutral-800);
+  --bg-action-primary: var(--color-neutral-150);
+  --bg-action-primary-hover: var(--color-neutral-200);
+  --bg-action-secondary: var(--color-neutral-800);
+  --bg-action-secondary-hover: var(--color-neutral-500);
+  --bg-status-warning-hover: #fbbf24;
+
+  --border-default: var(--color-neutral-800);
+  --border-default-inverted: var(--color-neutral-150);
+  --border-error: #ef4444;
+  --border-warning: #f59e0b;
+  --border-success: #22c55e;
+  --border-divider: var(--color-neutral-800);
+  --border-divider-tint: var(--color-neutral-700);
+  --border-indicator: var(--color-neutral-400);
+
+  --focus-ring: #ffffff;
+
+  --shadow-1: 0 4px 24px -4px rgba(0, 0, 0, 0.24);
+  --shadow-2: 0 8px 32px -4px rgba(0, 0, 0, 0.48);
+  --shadow-3: 0 12px 48px -8px rgba(0, 0, 0, 0.48);
+}
+
+.dark-elevated {
+  /* Inherits .dark; only the surfaces that differ to create depth. */
+  --fg-secondary-inverted: #949494;
+  --bg-surface-container: #141414;
+  --bg-action-secondary: #3d3d3d;
+  --border-default: var(--color-neutral-850);
+}

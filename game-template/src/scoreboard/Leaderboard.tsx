@@ -97,55 +97,72 @@ export function Leaderboard({
   // dashboard resolves DotNS names. In-game we show truncated addresses.
   const label = (addr: string) => shortAddress(addr);
 
+  // One `.leaderboard` container (preserves the `.leaderboard .is-you` test
+  // hook + count across both lists), with each list in its own titled card.
+  // The app shows the whole thing on the right column (desktop) or splits the
+  // two cards across the Scores / Recent tabs via CSS (mobile).
   return (
-    <div className="leaderboard">
-      <h2>Top {limit}</h2>
-      {loading && topDisplayed.length === 0 ? (
-        <p className="leaderboard-empty">Loading…</p>
-      ) : topDisplayed.length === 0 ? (
-        <p className="leaderboard-empty">No scores yet. Be the first.</p>
-      ) : (
-        <ol className="leaderboard-list">
-          {topDisplayed.map((entry, i) => {
-            const isYou =
-              highlightPlayer !== undefined &&
-              entry.player.toLowerCase() === highlightPlayer.toLowerCase();
-            return (
-              <li key={`${entry.player}-${i}`} className={isYou ? "is-you" : ""}>
-                <span className="rank">#{i + 1}</span>
-                <span className="player" title={entry.player}>
-                  {label(entry.player)}
-                </span>
-                <span className="score">{entry.score}</span>
-              </li>
-            );
-          })}
-        </ol>
-      )}
+    <div className="leaderboard flex flex-col gap-4">
+      <section className="board-card top-card bg-surface-container rounded-container p-5 shadow-1">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-secondary m-0 mb-3">
+          Top {limit}
+        </h2>
+        {loading && topDisplayed.length === 0 ? (
+          <p className="leaderboard-empty text-tertiary text-sm m-0">Loading…</p>
+        ) : topDisplayed.length === 0 ? (
+          <p className="leaderboard-empty text-tertiary text-sm m-0">
+            No scores yet. Be the first.
+          </p>
+        ) : (
+          <ol className="leaderboard-list">
+            {topDisplayed.map((entry, i) => {
+              const isYou =
+                highlightPlayer !== undefined &&
+                entry.player.toLowerCase() === highlightPlayer.toLowerCase();
+              return (
+                <li key={`${entry.player}-${i}`} className={isYou ? "is-you" : ""}>
+                  <span className="rank">#{i + 1}</span>
+                  <span className="player" title={entry.player}>
+                    {label(entry.player)}
+                  </span>
+                  <span className="score">{entry.score}</span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </section>
 
-      <h2 className="recent-heading">Recent plays</h2>
-      {loading && recentDisplayed.length === 0 ? (
-        <p className="leaderboard-empty">Loading…</p>
-      ) : recentDisplayed.length === 0 ? (
-        <p className="leaderboard-empty">No plays yet.</p>
-      ) : (
-        <ul className="leaderboard-list recent-list">
-          {recentDisplayed.map((entry, i) => {
-            const isYou =
-              highlightPlayer !== undefined &&
-              entry.player.toLowerCase() === highlightPlayer.toLowerCase();
-            return (
-              <li key={`r-${entry.timestamp}-${entry.player}-${i}`} className={isYou ? "is-you" : ""}>
-                <span className="player" title={entry.player}>
-                  {label(entry.player)}
-                </span>
-                <span className="score">{entry.score}</span>
-                <span className="when">{relativeTime(entry.timestamp)}</span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <section className="board-card recent-card bg-surface-container rounded-container p-5 shadow-1">
+        <h2 className="recent-heading text-sm font-semibold uppercase tracking-wide text-secondary m-0 mb-3">
+          Recent plays
+        </h2>
+        {loading && recentDisplayed.length === 0 ? (
+          <p className="leaderboard-empty text-tertiary text-sm m-0">Loading…</p>
+        ) : recentDisplayed.length === 0 ? (
+          <p className="leaderboard-empty text-tertiary text-sm m-0">No plays yet.</p>
+        ) : (
+          <ul className="leaderboard-list recent-list">
+            {recentDisplayed.map((entry, i) => {
+              const isYou =
+                highlightPlayer !== undefined &&
+                entry.player.toLowerCase() === highlightPlayer.toLowerCase();
+              return (
+                <li
+                  key={`r-${entry.timestamp}-${entry.player}-${i}`}
+                  className={isYou ? "is-you" : ""}
+                >
+                  <span className="player" title={entry.player}>
+                    {label(entry.player)}
+                  </span>
+                  <span className="score">{entry.score}</span>
+                  <span className="when">{relativeTime(entry.timestamp)}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

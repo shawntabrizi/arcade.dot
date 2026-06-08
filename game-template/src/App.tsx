@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Gamepad2, Trophy, History } from "lucide-react";
 import { SnakeGame } from "./games/snake/SnakeGame";
 import type { ScoreEntry } from "./scoreboard/api";
 import { Leaderboard, shortAddress } from "./scoreboard/Leaderboard";
@@ -38,6 +39,7 @@ const CONTRACT_DEPLOYED = FAKE_GATEWAY || isContractDeployed();
 const GAME_KEY = getGcsAddress() ?? "local";
 
 type Phase = "playing" | "confirm" | "prompt" | "submitting" | "submitted" | "error";
+type Tab = "play" | "scores" | "recent";
 
 export function App() {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -45,6 +47,9 @@ export function App() {
   const [phase, setPhase] = useState<Phase>("playing");
   const [error, setError] = useState<string | null>(null);
   const [player, setPlayer] = useState<`0x${string}` | null>(null);
+  // Drives which 100dvh panel shows on mobile; desktop ignores it (CSS shows
+  // the game + boards columns side by side and hides the tab bar).
+  const [tab, setTab] = useState<Tab>("play");
   // Optimistic: the player's just-played score, shown on the board immediately
   // and reconciled when the real submit lands. Only set once submitted.
   const [pendingEntry, setPendingEntry] = useState<ScoreEntry | null>(null);
@@ -184,129 +189,236 @@ export function App() {
     setPhase("playing");
   }, []);
 
-  return (
-    <div className="page">
-      <header className="page-header">
-        <h1>Arcade Game Template</h1>
-        {/* Three honest login-status states (SPEC §8.1/§8.3), detected on load
-            prompt-free and updated live via the session subscription. */}
-        {signedIn ? (
-          <p className="tagline" data-session="signed-in">
-            Signed in as{" "}
-            <code title={session.account!.h160}>{shortAddress(session.account!.h160)}</code>
-            {" "}— you&rsquo;ll be asked before saving a new best.
+  // The session status line (three honest SPEC §8.1/§8.3 states). Kept in one
+  // place so it can sit in the Play panel header on every viewport.
+  const statusLine = signedIn ? (
+    <p className="text-sm text-secondary m-0" data-session="signed-in">
+      Signed in as{" "}
+      <code className="text-primary" title={session.account!.h160}>
+        {shortAddress(session.account!.h160)}
+      </code>{" "}
+      — you&rsquo;ll be asked before saving a new best.
+    </p>
+  ) : session.inHost ? (
+    <p className="text-sm text-secondary m-0" data-session="in-host-guest">
+      You&rsquo;re in the Polkadot app — sign in to keep your scores.{" "}
+      <button
+        type="button"
+        onClick={signInNow}
+        className="text-link hover:text-link-hover underline bg-transparent border-0 p-0 m-0 font-inherit cursor-pointer"
+      >
+        Sign in
+      </button>
+      {error && <span className="text-error"> Couldn&rsquo;t sign in: {error}</span>}
+    </p>
+  ) : (
+    <p className="text-sm text-secondary m-0" data-session="standalone-guest">
+      Guest mode — open this game in the Polkadot app to save scores.
+    </p>
+  );
+
+  // Game-over sheet content (save / sign-in / submitted / error). Rendered as a
+  // bottom sheet over the game on mobile, an inline card on desktop.
+  const sheet = (() => {
+    if (phase === "confirm") {
+      return (
+        <div className="sheet">
+          <p className="text-base font-semibold text-primary m-0 mb-3">
+            New best! Save your score?
           </p>
-        ) : session.inHost ? (
-          <p className="tagline" data-session="in-host-guest">
-            You&rsquo;re in the Polkadot app — sign in to keep your scores.{" "}
-            <button type="button" className="link-btn" onClick={signInNow}>
-              Sign in
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={saveScore}
+              className="bg-action-primary text-primary-inverted font-medium text-sm px-4 py-2 rounded-small hover:bg-action-primary-hover transition-colors cursor-pointer"
+            >
+              Save score
             </button>
-            {error && <span className="submit-error"> Couldn&rsquo;t sign in: {error}</span>}
-          </p>
-        ) : (
-          <p className="tagline" data-session="standalone-guest">
-            Guest mode — open this game in the Polkadot app to save scores.
-          </p>
-        )}
-      </header>
-
-      {!CONTRACT_DEPLOYED && (
-        <div className="banner banner-warn">
-          <strong>Game contract not deployed.</strong> Scores can&rsquo;t be saved on-chain yet.
-          Run the deploy pipeline (see <code>README.md</code>), then restart the dev server.
+            <button
+              type="button"
+              onClick={onRestart}
+              className="bg-action-secondary text-primary font-medium text-sm px-4 py-2 rounded-small hover:bg-action-secondary-hover transition-colors cursor-pointer"
+            >
+              No thanks
+            </button>
+          </div>
         </div>
-      )}
-
-      {gated ? (
-        <div className="layout">
-          <section className="game-col">
-            <div className="save-prompt">
-              <p>This game requires an account</p>
-              <button type="button" onClick={signInAtLaunch}>
-                Sign in with your host wallet
-              </button>
-              {error && <p className="submit-error">Couldn&rsquo;t sign in: {error}</p>}
-            </div>
-          </section>
+      );
+    }
+    if (phase === "prompt") {
+      return (
+        <div className="sheet">
+          <p className="text-base font-semibold text-primary m-0 mb-3">
+            Sign in to save your score
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={saveScore}
+              className="bg-action-primary text-primary-inverted font-medium text-sm px-4 py-2 rounded-small hover:bg-action-primary-hover transition-colors cursor-pointer"
+            >
+              Sign in &amp; save
+            </button>
+            <button
+              type="button"
+              onClick={onRestart}
+              className="bg-action-secondary text-primary font-medium text-sm px-4 py-2 rounded-small hover:bg-action-secondary-hover transition-colors cursor-pointer"
+            >
+              Keep playing as guest
+            </button>
+          </div>
         </div>
-      ) : (
-        <div className="layout">
-        <section className="game-col">
-          <SnakeGame onGameEnd={onGameEnd} />
-          {lastScore !== null && (
-            <p className="last-score">
-              Last score: <strong>{lastScore}</strong>
-              {phase === "submitting" && " · saving…"}
-              {phase === "submitted" && " · saved"}
-              {!CONTRACT_DEPLOYED && " · contract not deployed"}
-            </p>
-          )}
+      );
+    }
+    if (phase === "submitted") {
+      return (
+        <div className="sheet">
+          <p className="text-sm text-secondary m-0">
+            {player && (
+              <>
+                Saved as{" "}
+                <code className="text-primary" title={player}>
+                  {shortAddress(player)}
+                </code>
+                .{" "}
+              </>
+            )}
+            <button
+              type="button"
+              onClick={onRestart}
+              className="bg-action-secondary text-primary font-medium text-sm px-3 py-1.5 rounded-small hover:bg-action-secondary-hover transition-colors cursor-pointer"
+            >
+              Play again
+            </button>
+          </p>
+        </div>
+      );
+    }
+    if (phase === "error" && error) {
+      return (
+        <div className="sheet">
+          <p className="text-sm text-error m-0 mb-3 break-words">Couldn&rsquo;t save: {error}</p>
+          <button
+            type="button"
+            onClick={onRestart}
+            className="bg-action-secondary text-primary font-medium text-sm px-4 py-2 rounded-small hover:bg-action-secondary-hover transition-colors cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      );
+    }
+    return null;
+  })();
 
-          {phase === "confirm" && (
-            <div className="save-prompt">
-              <p>New best! Save your score?</p>
-              <button type="button" onClick={saveScore}>
-                Save score
-              </button>
-              <button type="button" className="ghost" onClick={onRestart}>
-                No thanks
-              </button>
-            </div>
-          )}
+  return (
+    <div className="app-shell text-primary">
+      <div className="panel-area">
+        {/* ── Play panel ──────────────────────────────────────────────── */}
+        <section
+          className="panel panel-play"
+          hidden={tab !== "play"}
+          aria-label="Play"
+        >
+          <div className="flex flex-col items-center gap-3 w-full max-w-[420px]">
+            <header className="text-center w-full">
+              <h1 className="text-2xl font-semibold tracking-tight text-primary m-0 mb-1">
+                Arcade Game Template
+              </h1>
+              {statusLine}
+            </header>
 
-          {phase === "prompt" && (
-            <div className="save-prompt">
-              <p>Sign in to save your score</p>
-              <button type="button" onClick={saveScore}>
-                Sign in &amp; save
-              </button>
-              <button type="button" className="ghost" onClick={onRestart}>
-                Keep playing as guest
-              </button>
-            </div>
-          )}
+            {!CONTRACT_DEPLOYED && (
+              <div className="bg-status-warning text-primary-inverted rounded-nested px-4 py-3 text-sm w-full">
+                <strong>Game contract not deployed.</strong> Scores can&rsquo;t be saved on-chain
+                yet. Run the deploy pipeline (see <code>README.md</code>), then restart the dev
+                server.
+              </div>
+            )}
 
-          {phase === "submitted" && (
-            <p className="last-score">
-              {player && (
-                <>
-                  Saved as <code title={player}>{shortAddress(player)}</code>.{" "}
-                </>
-              )}
-              <button type="button" className="ghost" onClick={onRestart}>
-                Play again
-              </button>
-            </p>
-          )}
-
-          {phase === "error" && error && (
-            <p className="submit-error">
-              Couldn&rsquo;t save: {error}{" "}
-              <button type="button" className="ghost" onClick={onRestart}>
-                Dismiss
-              </button>
-            </p>
-          )}
+            {gated ? (
+              <div className="sheet">
+                <p className="text-base font-semibold text-primary m-0 mb-3">
+                  This game requires an account
+                </p>
+                <button
+                  type="button"
+                  onClick={signInAtLaunch}
+                  className="bg-action-primary text-primary-inverted font-medium text-sm px-4 py-2 rounded-small hover:bg-action-primary-hover transition-colors cursor-pointer"
+                >
+                  Sign in with your host wallet
+                </button>
+                {error && (
+                  <p className="text-sm text-error m-0 mt-2 break-words">
+                    Couldn&rsquo;t sign in: {error}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <>
+                <SnakeGame onGameEnd={onGameEnd} />
+                {lastScore !== null && (
+                  <p className="text-sm text-secondary m-0">
+                    Last score: <strong className="text-primary">{lastScore}</strong>
+                    {phase === "submitting" && " · saving…"}
+                    {phase === "submitted" && " · saved"}
+                    {!CONTRACT_DEPLOYED && " · contract not deployed"}
+                  </p>
+                )}
+                {sheet}
+              </>
+            )}
+          </div>
         </section>
 
-        <section className="board-col">
-          <Leaderboard
-            api={SCOREBOARD}
-            refreshKey={refreshKey}
-            highlightPlayer={player ?? undefined}
-            pendingEntry={pendingEntry}
-          />
+        {/* ── Boards panel (Scores + Recent). One Leaderboard instance; the
+            active mobile tab toggles which card shows, desktop shows both. ── */}
+        <section
+          className={`panel panel-boards board-mode-${tab === "recent" ? "recent" : "scores"}`}
+          hidden={tab === "play"}
+          aria-label="Scores"
+        >
+          <div className="w-full max-w-[420px] mx-auto p-4">
+            <Leaderboard
+              api={SCOREBOARD}
+              refreshKey={refreshKey}
+              highlightPlayer={player ?? undefined}
+              pendingEntry={pendingEntry}
+            />
+          </div>
         </section>
       </div>
-      )}
 
-      <footer className="page-footer">
-        <p>
-          Polkadot Arcade game template. See <code>README.md</code> to deploy and register your
-          game, and <code>docs/modding.md</code> to swap the game.
-        </p>
-      </footer>
+      {/* ── Bottom tab bar (mobile only; hidden on desktop via CSS) ──────── */}
+      <nav className="tab-bar" aria-label="Sections">
+        <button
+          type="button"
+          className="tab-item"
+          aria-selected={tab === "play"}
+          onClick={() => setTab("play")}
+        >
+          <Gamepad2 size={22} aria-hidden />
+          Play
+        </button>
+        <button
+          type="button"
+          className="tab-item"
+          aria-selected={tab === "scores"}
+          onClick={() => setTab("scores")}
+        >
+          <Trophy size={22} aria-hidden />
+          Scores
+        </button>
+        <button
+          type="button"
+          className="tab-item"
+          aria-selected={tab === "recent"}
+          onClick={() => setTab("recent")}
+        >
+          <History size={22} aria-hidden />
+          Recent
+        </button>
+      </nav>
     </div>
   );
 }

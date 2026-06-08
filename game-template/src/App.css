@@ -1,6 +1,12 @@
+@import "./tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Global resets ─────────────────────────────────────────────────────── */
 :root {
-  color-scheme: light dark;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -13,231 +19,111 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: #1a1d24;
-  color: #e8e8ec;
-  min-height: 100vh;
+}
+
+body {
+  background: var(--bg-surface-main);
+  color: var(--fg-primary);
 }
 
 #root {
+  min-height: 100svh;
+}
+
+/* Design system focus convention: a single outline ring, not a Tailwind ring. */
+*:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* ── App shell ─────────────────────────────────────────────────────────── */
+/* Mobile-first: a fixed full-viewport column (panel area + bottom tab bar),
+   no page scroll. dvh follows mobile browser chrome so nothing is cut off. */
+.app-shell {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
   display: flex;
+  flex-direction: column;
+  overscroll-behavior: none;
+  background: var(--bg-surface-main);
+}
+
+/* The swappable panel region (Play / Scores / Recent on mobile). */
+.panel-area {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Each mobile panel fills the area; only the active one shows. We keep them
+   MOUNTED (display, not unmount) so test hooks like `.leaderboard .is-you`
+   in both lists exist at game-over regardless of the active tab. */
+.panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+/* The Play panel never scrolls; the game is centered and self-scaling. */
+.panel-play {
+  overflow: hidden;
+  align-items: center;
   justify-content: center;
+  padding: 12px;
 }
 
-.page {
-  width: 100%;
-  max-width: 920px;
-  padding: 32px 20px 60px;
+/* ── Bottom tab bar (mobile only) ──────────────────────────────────────── */
+.tab-bar {
+  flex: 0 0 auto;
+  display: flex;
+  background: var(--bg-surface-container);
+  border-top: 1px solid var(--border-divider);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
-.page-header {
-  text-align: center;
-  margin-bottom: 24px;
-}
-
-.page-header h1 {
-  margin: 0 0 6px;
-  font-size: 32px;
-  letter-spacing: -0.01em;
-}
-
-.tagline {
-  margin: 0;
-  color: #a0a3aa;
-  font-size: 14px;
-}
-
-/* Inline "Sign in" action for the in-host-guest tagline (SPEC §8.3). */
-.link-btn {
+.tab-item {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 10px 0 8px;
   background: none;
   border: none;
-  padding: 0;
-  margin: 0;
-  font: inherit;
-  color: #e6007a;
   cursor: pointer;
-  text-decoration: underline;
-}
-
-.link-btn:hover {
-  color: #ff2c95;
-}
-
-.player-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: center;
-  margin-bottom: 24px;
-}
-
-.player-row label {
-  font-size: 14px;
-  color: #a0a3aa;
-}
-
-.player-row input {
-  background: #2a2e38;
-  border: 1px solid #3a3f4b;
-  color: #e8e8ec;
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: 16px;
-  width: 180px;
-}
-
-.player-row input:focus {
-  outline: 2px solid #e6007a;
-  outline-offset: 1px;
-  border-color: transparent;
-}
-
-.player-hint {
-  font-size: 13px;
-  color: #d18cab;
-}
-
-.layout {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 28px;
-  align-items: start;
-  justify-content: center;
-}
-
-@media (max-width: 760px) {
-  .layout {
-    grid-template-columns: 1fr;
-    justify-items: center;
-  }
-}
-
-.game-col {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
-
-.last-score {
-  margin: 0;
-  font-size: 14px;
-  color: #a0a3aa;
-}
-
-.last-score strong {
-  color: #e8e8ec;
-}
-
-.banner {
-  max-width: 760px;
-  margin: 0 auto 24px;
-  padding: 12px 16px;
-  border-radius: 8px;
-  font-size: 13px;
-  line-height: 1.5;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #c7cad1;
-}
-
-.banner code {
-  background: rgba(0, 0, 0, 0.25);
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-size: 12px;
-}
-
-.banner-warn {
-  background: rgba(230, 178, 0, 0.12);
-  border: 1px solid rgba(230, 178, 0, 0.35);
-  color: #f0d384;
-}
-
-.submit-error {
-  margin: 0;
-  font-size: 13px;
-  color: #e88a8a;
-  max-width: 360px;
-  word-break: break-word;
-}
-
-/* SPEC §8.3: the "sign in to save your score" nudge, shown to a guest at game
-   over when their score is worth keeping. */
-.save-prompt {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  max-width: 360px;
-  padding: 14px 16px;
-  border-radius: 10px;
-  background: rgba(230, 0, 122, 0.1);
-  border: 1px solid rgba(230, 0, 122, 0.4);
-}
-
-.save-prompt p {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: #f0e8ee;
-}
-
-.save-prompt button,
-button.ghost {
+  color: var(--fg-tertiary);
   font: inherit;
-  cursor: pointer;
-}
-
-.save-prompt button {
-  padding: 8px 14px;
-  border-radius: 8px;
-  border: none;
-  background: #e6007a;
-  color: #fff;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
+  position: relative;
 }
 
-button.ghost {
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: transparent;
-  color: #a0a3aa;
-  font-size: 12px;
+.tab-item[aria-selected="true"] {
+  color: var(--fg-primary);
 }
 
-button.ghost:hover {
-  color: #e8e8ec;
-  border-color: rgba(255, 255, 255, 0.35);
+/* Selection indicator (tabs indicate selection — not a filled button). */
+.tab-item[aria-selected="true"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 28px;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: var(--fg-primary);
 }
 
-.board-col {
-  width: 100%;
-  max-width: 420px;
-}
-
-.leaderboard {
-  background: #232730;
-  border-radius: 12px;
-  padding: 20px;
-}
-
-.leaderboard h2 {
-  margin: 0 0 16px;
-  font-size: 18px;
-  letter-spacing: 0.02em;
-  color: #a0a3aa;
-  text-transform: uppercase;
-}
-
-.leaderboard-empty {
-  margin: 0;
-  color: #7a7e87;
-  font-size: 14px;
-}
-
+/* ── Leaderboard lists ─────────────────────────────────────────────────── */
 .leaderboard-list {
   list-style: none;
   margin: 0;
@@ -253,21 +139,22 @@ button.ghost:hover {
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-small);
   font-size: 15px;
+  color: var(--fg-primary);
 }
 
 .leaderboard-list li:nth-child(odd) {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-surface-nested);
 }
 
 .leaderboard-list li.is-you {
-  background: rgba(230, 0, 122, 0.18);
-  outline: 1px solid rgba(230, 0, 122, 0.4);
+  background: var(--bg-selection-container-active);
+  outline: 1px solid var(--border-divider-tint);
 }
 
 .leaderboard-list .rank {
-  color: #7a7e87;
+  color: var(--fg-tertiary);
   font-variant-numeric: tabular-nums;
   font-size: 13px;
 }
@@ -284,33 +171,124 @@ button.ghost:hover {
   font-variant-numeric: tabular-nums;
 }
 
-.recent-heading {
-  margin-top: 24px !important;
-}
-
-/* Recent plays have no rank column: player | score | time */
+/* Recent plays: player | score | time (no rank column). */
 .recent-list li {
   grid-template-columns: 1fr auto auto;
 }
 
 .recent-list .when {
-  color: #7a7e87;
+  color: var(--fg-tertiary);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   min-width: 64px;
   text-align: right;
 }
 
-.page-footer {
-  margin-top: 48px;
-  text-align: center;
-  color: #7a7e87;
-  font-size: 13px;
+/* ── Mobile tab split: a single boards panel holds both cards; the active
+   tab toggles which one shows. On desktop both always show (min-width block).
+   The board-mode-* class is set from activeTab in App.tsx. ─────────────── */
+.board-mode-scores .recent-card {
+  display: none;
 }
 
-.page-footer code {
-  background: #2a2e38;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 12px;
+.board-mode-recent .top-card {
+  display: none;
+}
+
+/* ── Bottom sheet (save / sign-in prompts over the game) ───────────────── */
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: var(--bg-surface-container);
+  border-top-left-radius: var(--radius-container);
+  border-top-right-radius: var(--radius-container);
+  box-shadow: var(--shadow-2);
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+  animation: sheet-up 180ms ease-out;
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* ── Desktop (≥760px) ──────────────────────────────────────────────────── */
+@media (min-width: 760px) {
+  .app-shell {
+    position: static;
+    height: auto;
+    min-height: 100dvh;
+    overflow-y: auto;
+  }
+
+  .panel-area {
+    display: grid;
+    grid-template-columns: auto minmax(320px, 420px);
+    gap: 28px;
+    align-items: start;
+    justify-content: center;
+    max-width: 1100px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 24px 24px 48px;
+  }
+
+  /* Everything is visible at once; the tab state is ignored. */
+  .panel {
+    position: static;
+    inset: auto;
+    overflow: visible;
+  }
+
+  .panel[hidden] {
+    display: flex;
+  }
+
+  /* Game in the left column; both boards stack in the right column (the mobile
+     board-mode-* hide rules are overridden below so both cards show). */
+  .panel-play {
+    overflow: visible;
+    padding: 0;
+    align-items: center;
+    justify-content: flex-start;
+    grid-column: 1;
+  }
+
+  .panel-boards {
+    grid-column: 2;
+  }
+
+  .panel-boards > div {
+    padding: 0;
+    max-width: none;
+  }
+
+  .board-mode-scores .recent-card,
+  .board-mode-recent .top-card {
+    display: block;
+  }
+
+  /* On desktop the sheet is an inline card under the game, not a slide-up. */
+  .sheet {
+    position: static;
+    z-index: auto;
+    border-radius: var(--radius-container);
+    box-shadow: none;
+    border: 1px solid var(--border-divider);
+    margin-top: 12px;
+    padding: 16px 18px;
+    animation: none;
+    max-width: 380px;
+  }
+
+  .tab-bar {
+    display: none;
+  }
 }
