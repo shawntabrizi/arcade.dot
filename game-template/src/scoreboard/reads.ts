@@ -1,9 +1,5 @@
 import type { ScoreboardAPI, ScoreEntry } from "./api";
-import { gcsQuery, isGcsDeployed } from "./gcs";
-
-// A fixed read origin. GCS reads are dry-runs (SPEC §4.2 reads), so any SS58
-// works and nothing is signed or paid. The zero account never plays.
-const READ_ORIGIN = "5C4hrfjw9DjXZTzV3MwzrrAr9P1MJhSrvWGWqi1eSuyUpnhM";
+import { gcsQuery, isGcsDeployed, READ_ORIGIN } from "./gcs";
 
 interface RawEntry {
   player: `0x${string}`;

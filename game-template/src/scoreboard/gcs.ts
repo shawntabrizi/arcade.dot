@@ -10,6 +10,14 @@ import cdmJson from "../../cdm.json";
 // address is recorded in cdm.json by the deploy pipeline (SPEC §10.3 step 4).
 const CONTRACT_NAME = "@arcade/gcs-reference";
 
+// The origin for read dry-runs. pallet_revive reverts a contract dry-run with
+// AccountUnmapped unless the origin is an account already mapped on-chain — so
+// this is NOT "any SS58". Alice is mapped on paseo-next-v2 (she deploys the
+// contracts), so reads succeed without the app signing/mapping anything. A
+// single shared constant: an earlier unmapped origin (5C4hrfjw…) made the
+// in-game board read empty even when scores existed on-chain.
+export const READ_ORIGIN = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
+
 interface ContractEntry {
   address: `0x${string}`;
   abi: unknown[];
@@ -73,9 +81,9 @@ export function gcsContract(): any | null {
   return inkSdkBest().getContract({ abi: entry.abi }, entry.address);
 }
 
-// A best-block read (dry-run). `origin` is any SS58 — reads don't need a funded
-// or mapped account. Returns the decoded value, or null on a reverted/failed
-// query.
+// A best-block read (dry-run). `origin` MUST be a mapped account (see
+// READ_ORIGIN) or pallet_revive reverts with AccountUnmapped. Returns the
+// decoded value, or null on a reverted/failed query.
 export async function gcsQuery<T>(
   method: string,
   data: Record<string, unknown>,

@@ -12,7 +12,7 @@ import type { ScoreEntry, ScoreOrdering } from "./api";
 import type { ChainGateway, SessionInfo } from "./gateway";
 import { resolveProductIdentifier } from "./identifier";
 import { contractScoreboard } from "./reads";
-import { gcsContract, getClient, inkSdkBest } from "./gcs";
+import { gcsContract, getClient, inkSdkBest, READ_ORIGIN } from "./gcs";
 
 // The ONE module that wires the real host integration. Everything else depends
 // only on the ChainGateway seam (gateway.ts).
@@ -184,7 +184,7 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
     // immutable per SPEC §4.2 so caching is safe.
     const o = contract
       ? await contract
-          .query("scoreOrdering", { origin: "5C4hrfjw9DjXZTzV3MwzrrAr9P1MJhSrvWGWqi1eSuyUpnhM", data: {} })
+          .query("scoreOrdering", { origin: READ_ORIGIN, data: {} })
           .then((r: { success: boolean; value?: { response: number } }) =>
             r.success ? r.value!.response : 0,
           )
@@ -320,7 +320,7 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
       const contract = gcsContract();
       if (!contract) return [];
       const r = await contract.query("getLeaderboard", {
-        origin: connected?.ss58 ?? "5C4hrfjw9DjXZTzV3MwzrrAr9P1MJhSrvWGWqi1eSuyUpnhM",
+        origin: connected?.ss58 ?? READ_ORIGIN,
         data: { offset, limit },
       });
       return r.success ? toEntries(r.value.response) : [];
@@ -330,7 +330,7 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
       const contract = gcsContract();
       if (!contract) return [];
       const r = await contract.query("getRecent", {
-        origin: connected?.ss58 ?? "5C4hrfjw9DjXZTzV3MwzrrAr9P1MJhSrvWGWqi1eSuyUpnhM",
+        origin: connected?.ss58 ?? READ_ORIGIN,
         data: { offset, limit },
       });
       return r.success ? toEntries(r.value.response) : [];
