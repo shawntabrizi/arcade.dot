@@ -44,12 +44,11 @@ export interface ChainGateway {
   // if the host is unavailable or the user declines.
   connect(): Promise<`0x${string}`>;
 
-  // ensureAccountMapped for the connected player (idempotent pallet_revive
-  // mapping). Safe to call before every submit; short-circuits when mapped.
-  ensureMapped(): Promise<void>;
-
   // submitScore(score) on the GCS contract from the connected player, resolving
-  // at best-block inclusion (SPEC §4.2 / §8.1).
+  // at best-block inclusion (SPEC §4.2 / §8.1). Maps the account (pallet_revive
+  // map_account) and submits in ONE batch_all extrinsic when the account isn't
+  // mapped yet — a single host approval, not two (the player only pulls out
+  // their phone once). When already mapped it's a plain submit.
   submitScore(score: number): Promise<void>;
 
   // GCS reads for the in-game scoreboard (SPEC §4.2).

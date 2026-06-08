@@ -67,10 +67,10 @@ function fakeGateway(opts: {
       for (const cb of listeners) cb();
       return player;
     },
-    async ensureMapped() {
-      state.mappedCalls++;
-    },
     async submitScore(score: number) {
+      // Real gateway maps-if-needed + submits in one approval; the first submit
+      // "maps" once.
+      if (state.mappedCalls === 0) state.mappedCalls++;
       state.submits.push(score);
     },
     async getLeaderboard(): Promise<ScoreEntry[]> {

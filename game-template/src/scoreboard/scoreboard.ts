@@ -164,9 +164,9 @@ export class Scoreboard {
     clearGuestBest(this.store, this.gameKey);
   }
 
-  // The single submit funnel: ensureMapped (idempotent) then submitScore.
+  // The single submit funnel. submitScore maps-if-needed and submits in one
+  // batched approval (see ChainGateway.submitScore) — one phone pull, not two.
   private async submit(score: number): Promise<void> {
-    await this.gateway.ensureMapped();
     await this.gateway.submitScore(score);
   }
 

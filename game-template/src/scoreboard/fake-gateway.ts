@@ -94,10 +94,10 @@ export function createFakeGateway(): ChainGateway {
       for (const cb of listeners) cb();
       return player;
     },
-    async ensureMapped() {
-      h.state.mappedCalls++;
-    },
     async submitScore(score: number) {
+      // submitScore maps-if-needed and submits in one approval (real gateway
+      // batches them). Model that here: the first submit "maps" once.
+      if (h.state.mappedCalls === 0) h.state.mappedCalls++;
       h.state.submits.push(score);
     },
     async getLeaderboard(): Promise<ScoreEntry[]> {

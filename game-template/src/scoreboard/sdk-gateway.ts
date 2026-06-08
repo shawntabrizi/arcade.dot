@@ -7,7 +7,7 @@ import {
 } from "@novasamatech/host-api-wrapper";
 import { RequestCredentialsErr } from "@novasamatech/host-api";
 import { ss58ToH160 } from "@parity/product-sdk-address";
-import { ensureAccountMapped, submitAndWatch } from "@parity/product-sdk-tx";
+import { batchSubmitAndWatch, type BatchableCall } from "@parity/product-sdk-tx";
 import type { ScoreEntry, ScoreOrdering } from "./api";
 import type { ChainGateway, SessionInfo } from "./gateway";
 import { resolveProductIdentifier } from "./identifier";
@@ -276,30 +276,13 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
       return connected.h160;
     },
 
-    async ensureMapped() {
-      if (!connected) throw new Error("Sign in before mapping the account.");
-      if (mapped) return;
-      await ensureChainSubmit();
-      const sdk = inkSdkBest();
-      // pallet_revive on Paseo Next v2 requires every SS58 origin that calls a
-      // contract to have an explicit map_account entry. ensureAccountMapped is
-      // idempotent (short-circuits when storage already has the entry).
-      await ensureAccountMapped(
-        connected.ss58,
-        connected.signer,
-        { addressIsMapped: (addr: string) => sdk.addressIsMapped(addr) },
-        reviveApi(),
-      );
-      mapped = true;
-    },
-
     async submitScore(score) {
       if (!connected) throw new Error("Sign in before submitting a score.");
       await ensureChainSubmit();
       const contract = gcsContract();
       if (!contract) throw new Error("GCS contract is not deployed (missing from cdm.json).");
-      // Dry-run at best-block, then submit the dry-run's own tx (fills gas +
-      // storage-deposit limits pallet_revive requires), resolving at best block.
+      // Dry-run at best-block; the dry-run's tx carries the gas + storage-deposit
+      // limits pallet_revive needs (preserved when nested in a batch).
       const dry = await contract.query("submitScore", {
         origin: connected.ss58,
         data: { score: BigInt(score) },
@@ -311,12 +294,26 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
           )}`,
         );
       }
-      const result = await submitAndWatch(dry.value.send(), connected.signer, {
+
+      // ONE host approval: pallet_revive requires the SS58 origin to be mapped
+      // before a contract call (else AccountUnmapped). When unmapped, batch
+      // map_account + the contract call into a single batch_all extrinsic so the
+      // player signs ONCE, not twice. map_account is one-time; once mapped (this
+      // session or already on-chain) we submit the call alone.
+      const sdk = inkSdkBest();
+      if (!mapped) mapped = await sdk.addressIsMapped(connected.ss58);
+      const calls: BatchableCall[] = [];
+      if (!mapped) calls.push(reviveApi().tx.Revive.map_account());
+      calls.push(dry.value.send());
+
+      const result = await batchSubmitAndWatch(calls, reviveApi(), connected.signer, {
+        mode: "batch_all",
         waitFor: "best-block",
       });
       if (!result.ok) {
         throw new Error(`submitScore reverted: ${JSON.stringify(result.dispatchError)}`);
       }
+      mapped = true; // a successful batch leaves the account mapped on-chain
     },
 
     async getLeaderboard(offset, limit) {

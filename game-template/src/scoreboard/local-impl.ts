@@ -82,9 +82,6 @@ export function createLocalGateway(ordering: ScoreOrdering = 0): ChainGateway {
       for (const cb of listeners) cb();
       return LOCAL_PLAYER;
     },
-    async ensureMapped() {
-      /* no chain to map against */
-    },
     async submitScore(score) {
       append(score);
     },
