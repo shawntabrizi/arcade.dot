@@ -10,6 +10,7 @@ import { ss58ToH160 } from "@parity/product-sdk-address";
 import { ensureAccountMapped, submitAndWatch } from "@parity/product-sdk-tx";
 import type { ScoreEntry, ScoreOrdering } from "./api";
 import type { ChainGateway, SessionInfo } from "./gateway";
+import { resolveProductIdentifier } from "./identifier";
 import { contractScoreboard } from "./reads";
 import { gcsContract, getClient, inkSdkBest } from "./gcs";
 
@@ -67,13 +68,14 @@ export interface SdkGatewayOptions {
   dotNsIdentifier?: string;
 }
 
-// Identifier the host uses to scope our product. RPS getProductIdentifier:
-// window.location.host verbatim, with a sensible fallback.
-function getProductIdentifier(fallback?: string): string {
-  if (typeof window !== "undefined" && window.location.host) {
-    return window.location.host;
-  }
-  return fallback ?? "arcade-game.dot";
+// Identifier the host uses to scope our product. Use the raw host only when
+// it's itself a valid identifier (dev: "localhost:PORT", or a ".dot" origin);
+// in the deployed sandbox the host is "<label>.app.dot.li" (ends ".dot.li" —
+// rejected by dot.li with DomainNotValid), so fall back to the configured
+// "<domain>.dot". See identifier.ts for the dot.li acceptance rule.
+function getProductIdentifier(configuredDotId?: string): string {
+  const host = typeof window !== "undefined" ? window.location.host : "";
+  return resolveProductIdentifier(host, configuredDotId);
 }
 
 export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway {
@@ -82,6 +84,7 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
 
   let connected: Connected | null = null;
   let lastInHost = false;
+  let lastError: string | null = null;
   let orderingCache: ScoreOrdering | null = null;
   let chainSubmitGranted = false;
   let mapped = false;
@@ -89,6 +92,20 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
 
   function notify() {
     for (const cb of listeners) cb();
+  }
+
+  // Turn a host credential error into a specific, actionable string (Fix #3).
+  // The variant is what we need to see when sign-in fails in a host.
+  function describeCredError(error: unknown): string {
+    if (error instanceof RequestCredentialsErr.NotConnected) {
+      return "not signed in to the host";
+    }
+    if (error instanceof RequestCredentialsErr.DomainNotValid) {
+      return `host rejected the app identifier "${identifier}" (DomainNotValid) — it must be the deployed <domain>.dot`;
+    }
+    const name = (error as { constructor?: { name?: string } })?.constructor?.name;
+    const msg = (error as { message?: string })?.message;
+    return `${name ?? "error"}${msg ? `: ${msg}` : ""}`;
   }
 
   // Build the cached `connected` identity from a fetched product-account public
@@ -132,21 +149,20 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
         // A host responded (so inHost = true), we just have no signed-in session.
         connected = null;
         lastInHost = true;
+        lastError = describeCredError(result.error); // Fix #3: keep the variant.
         notify();
-        if (result.error instanceof RequestCredentialsErr.NotConnected) {
-          return { inHost: true };
-        }
-        // DomainNotValid / Rejected / Unknown — still in-host, still guest.
         return { inHost: true };
       }
       connected = adopt(result.value.publicKey);
       lastInHost = true;
+      lastError = null;
       notify();
       return { inHost: true };
-    } catch {
+    } catch (e) {
       // Hard transport failure → no host responded → standalone guest.
       connected = null;
       lastInHost = false;
+      lastError = `no host transport (${String((e as { message?: string })?.message ?? e).slice(0, 80)})`;
       notify();
       return { inHost: false };
     }
@@ -222,20 +238,16 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
     },
 
     subscribeSession(cb: () => void): () => void {
+      // Fix #1: do NOT call accountsProvider.subscribeAccountConnectionStatus —
+      // outside the sandbox it throws "Environment is not correct" synchronously,
+      // which crashed the whole app to a blank page (standalone + desktop). RPS
+      // deliberately uses no live subscription: a one-shot getProductAccount on
+      // load (ensureDetectStarted → refresh → notify) plus a re-fetch after the
+      // explicit connect() is enough. The listener fires when refresh resolves.
       listeners.add(cb);
       ensureDetectStarted();
-      // Keep the cached identity current with host-driven connection changes
-      // (sign-in / sign-out inside the host) without prompting.
-      const sub = accountsProvider.subscribeAccountConnectionStatus(() => {
-        void refresh();
-      });
       return () => {
         listeners.delete(cb);
-        try {
-          sub?.unsubscribe?.();
-        } catch {
-          /* ignore */
-        }
       };
     },
 
@@ -252,9 +264,12 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
         res = await refresh();
       }
       if (!connected) {
+        // Fix #3: surface the real reason (variant + identifier), not a generic
+        // "no product account" that hides whether it's DomainNotValid, a denied
+        // login, or no host at all.
         throw new Error(
           res.inHost
-            ? "Host did not return a product account after sign-in."
+            ? `Couldn't sign in: ${lastError ?? "host returned no product account"}`
             : "Open this game in the Polkadot app to sign in.",
         );
       }
