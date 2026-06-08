@@ -1,16 +1,16 @@
 import type { ScoreEntry, ScoreOrdering } from "./api";
 
 // The narrow chain/SDK boundary the scoreboard logic depends on. The real
-// implementation (sdk-gateway.ts) wires product-sdk's SignerManager +
-// ensureAccountMapped + submitAndWatch and @polkadot-api/sdk-ink reads against
-// the GCS reference contract. Unit tests inject a fake — they MUST NOT import
-// the real product-sdk. This is the single seam between policy (scoreboard.ts)
-// and the chain.
+// implementation (sdk-gateway.ts) wires @novasamatech/host-api-wrapper's
+// product-account provider + signer, ensureAccountMapped + submitAndWatch, and
+// @polkadot-api/sdk-ink reads against the GCS reference contract. Unit tests
+// inject a fake — they MUST NOT import the real host SDK. This is the single
+// seam between policy (scoreboard.ts) and the chain.
 // The host/login situation detected on load WITHOUT prompting (SPEC §8.1/§8.3).
-// `inHost` is the sync container heuristic (running inside the Polkadot app
-// host). `account` is the already-connected host wallet account, or null when
-// nobody is connected (a guest — whether in-host or standalone). The three UX
-// states are (inHost, account):
+// `inHost` is true when a host transport responded (running inside the Polkadot
+// app or dot.li web host). `account` is the signed-in product account, or null
+// when nobody is connected (a guest — whether in-host or standalone). The three
+// UX states are (inHost, account):
 //   account != null              → SIGNED IN
 //   account == null && inHost    → IN-HOST GUEST (sign-in available now)
 //   account == null && !inHost   → STANDALONE GUEST (sign-in unavailable)
@@ -23,9 +23,11 @@ export interface ChainGateway {
   // Immutable contract metadata (SPEC §4.2). Cached for the session by the impl.
   scoreOrdering(): Promise<ScoreOrdering>;
 
-  // PROMPT-FREE login-status read for on-load UX (SPEC §8.1/§8.3). Uses only
-  // the passive SignerManager.getState() + the sync container heuristic; it
-  // MUST NOT call connect() or otherwise prompt. Returns the current session.
+  // PROMPT-FREE login-status read for on-load UX (SPEC §8.1/§8.3). Kicks off
+  // the prompt-free product-account fetch (getProductAccount returns
+  // NotConnected rather than opening a login UI); it MUST NOT open a login
+  // prompt. Returns the latest known session; the App re-reads when
+  // subscribeSession fires after detection resolves.
   detectSession(): SessionInfo;
 
   // Subscribe to passive session changes (the host connects/disconnects an
@@ -33,13 +35,13 @@ export interface ChainGateway {
   // unsubscribe. The callback re-reads detectSession() for the new state.
   subscribeSession(cb: () => void): () => void;
 
-  // The signed-in player's H160, or null when no host account is connected
-  // (guest mode). Synchronous read of cached connection state.
+  // The signed-in player's H160, or null when no account is connected (guest
+  // mode). Synchronous read of cached connection state.
   currentPlayer(): `0x${string}` | null;
 
-  // Connect a host wallet account via SignerManager (SPEC §8.1: the host
-  // wallet account, NOT a product account). Resolves to the player's H160.
-  // Rejects if the host is unavailable or the user declines.
+  // Connect the player's per-app PRODUCT ACCOUNT via the host (SPEC §8.1),
+  // opening the host login UI if needed. Resolves to the player's H160. Rejects
+  // if the host is unavailable or the user declines.
   connect(): Promise<`0x${string}`>;
 
   // ensureAccountMapped for the connected player (idempotent pallet_revive

@@ -1,5 +1,7 @@
 import { createClient, type PolkadotClient } from "polkadot-api";
-import { getWsProvider } from "polkadot-api/ws-provider/web";
+// polkadot-api 2.x removed the `polkadot-api/ws-provider/*` subpaths; the WS
+// provider now ships as the standalone `@polkadot-api/ws-provider` package.
+import { getWsProvider } from "@polkadot-api/ws-provider";
 import { createInkSdk } from "@polkadot-api/sdk-ink";
 import cdmJson from "../../cdm.json";
 

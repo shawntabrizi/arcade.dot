@@ -18,11 +18,13 @@
     "arcade:ship": "node scripts/ship.mjs"
   },
   "dependencies": {
-    "@parity/product-sdk-host": "^0.7.1",
-    "@parity/product-sdk-signer": "^0.6.2",
+    "@novasamatech/host-api": "^0.8.4",
+    "@novasamatech/host-api-wrapper": "^0.8.4",
+    "@parity/product-sdk-address": "^0.1.1",
     "@parity/product-sdk-tx": "^0.2.9",
-    "@polkadot-api/sdk-ink": "^0.6.2",
-    "polkadot-api": "^1.23.3",
+    "@polkadot-api/sdk-ink": "^0.7.0",
+    "@polkadot-api/ws-provider": "^0.9.0",
+    "polkadot-api": "^2.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

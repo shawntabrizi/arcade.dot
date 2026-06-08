@@ -50,7 +50,10 @@ export function suriSigner(suri = arcadeSuri()) {
   const kp = sr25519CreateDerive(miniSecret)(paths ?? "");
   const ss58 = ss58Address(kp.publicKey);
   const signer = getPolkadotSigner(kp.publicKey, "Sr25519", kp.sign);
-  return { suri, signer, ss58, h160: ss58ToEthereum(ss58).asHex() };
+  // @polkadot-api/sdk-ink 0.7.0 returns an EIP-55 hex string directly (the 0.6.x
+  // `.asHex()` accessor is gone). Lowercase to match pallet-revive's expected
+  // form and the prior logged-summary format.
+  return { suri, signer, ss58, h160: ss58ToEthereum(ss58).toLowerCase() };
 }
 
 export const jstr = (v) =>

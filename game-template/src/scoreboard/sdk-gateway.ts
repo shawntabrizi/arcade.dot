@@ -1,42 +1,48 @@
-import type { PolkadotSigner } from "polkadot-api";
-import { SignerManager } from "@parity/product-sdk-signer";
+import { AccountId, type PolkadotSigner } from "polkadot-api";
+import {
+  createAccountsProvider,
+  requestPermission,
+  sandboxTransport,
+  type ProductAccount,
+} from "@novasamatech/host-api-wrapper";
+import { RequestCredentialsErr } from "@novasamatech/host-api";
+import { ss58ToH160 } from "@parity/product-sdk-address";
 import { ensureAccountMapped, submitAndWatch } from "@parity/product-sdk-tx";
-import { isInsideContainerSync } from "@parity/product-sdk-host";
-import { ss58ToEthereum } from "@polkadot-api/sdk-ink";
 import type { ScoreEntry, ScoreOrdering } from "./api";
 import type { ChainGateway, SessionInfo } from "./gateway";
 import { contractScoreboard } from "./reads";
 import { gcsContract, getClient, inkSdkBest } from "./gcs";
 
-// The ONE module that wires the real product-sdk. Everything else depends only
-// on the ChainGateway seam (gateway.ts). SPEC §8.1: the player is their HOST
-// WALLET account (SignerManager's host provider), NOT a product account.
+// The ONE module that wires the real host integration. Everything else depends
+// only on the ChainGateway seam (gateway.ts).
 //
-// ⚠ Integration spike (BUILD_PLAN item 6): this whole round-trip — connect →
-// ensureAccountMapped → submitScore at best-block — MUST be validated inside a
-// real Triangle host on paseo-next-v2. The pieces below are assembled per the
-// product-sdk contracts-demo example and the §8.1 requirements; the in-host
-// behavior (host provider availability, the H160 the contract actually sees as
-// caller(), AsPgas signed-extension handling for map_account/submitScore) is
-// what item 6 confirms. See the report.
-//
-// NOTE on the caller H160: GCS reads/writes identify a player by the address
-// pallet_revive maps the SS58 signer to. sdk-ink's `ss58ToEthereum` computes
-// that mapping address; we use it (not SignerAccount.h160, which is the
-// keccak-derived EVM address) so getBest(player) and submitScore agree.
+// This follows the PROVEN Rock-Paper-Scissors host recipe (works in BOTH the
+// dot.li web host AND the Polkadot Desktop app). It deliberately AVOIDS
+// @parity/product-sdk-signer's SignerManager: that path routes through
+// getLegacyAccounts(), which the new desktop/web hosts return empty → "no
+// accounts", and its container heuristic reports guest mode in Desktop. Instead
+// we go straight at @novasamatech/host-api-wrapper:
+//   - createAccountsProvider(sandboxTransport).getProductAccount(id, index)
+//     for the per-app PRODUCT ACCOUNT (the player's identity here);
+//   - getProductAccountSigner(account, "createTransaction") for the signer
+//     (the "createTransaction" signerType routes through the host's
+//     host_create_transaction RPC and bypasses the PJS signed-extension
+//     whitelist that breaks pallet_revive signing on Paseo Next v2);
+//   - ss58ToH160() from @parity/product-sdk-address for the H160 the contract
+//     sees as caller() (RPS proves this is the pallet_revive mapping; it is the
+//     SAME H160 used for getBest reads and submitScore so they agree).
+
+// The accounts provider, built once. createAccountsProvider now takes the
+// sandbox transport explicitly (host-api-wrapper 0.8.x); the same instance works
+// on both the Desktop webview and the dot.li iframe.
+const accountsProvider = createAccountsProvider(sandboxTransport);
+const accountIdCodec = AccountId();
 
 interface Connected {
   ss58: string;
   signer: PolkadotSigner;
   h160: `0x${string}`;
-}
-
-// Sync container detection (SPEC §8.3 in-host vs standalone) via the maintained
-// host SDK. isInsideContainerSync() is the synchronous heuristic (framed /
-// host markers); isInsideContainer() (async) does a deeper product-sdk probe,
-// but sync is right for the prompt-free on-load detection in detectSession().
-function isInsideHostSync(): boolean {
-  return isInsideContainerSync();
+  productAccount: ProductAccount;
 }
 
 function toEntries(
@@ -47,31 +53,113 @@ function toEntries(
 }
 
 export interface SdkGatewayOptions {
-  dappName?: string;
-  // SS58 prefix for Paseo Asset Hub. 0 matches the deploy/verify scripts.
+  // SS58 prefix for Paseo Asset Hub. 0 matches the deploy/verify scripts. (Kept
+  // for signature compatibility; AccountId() defaults to the generic prefix.)
   ss58Prefix?: number;
-  // The app's `.dot` identifier (e.g. "arcade-snake.dot"). REQUIRED in a real
-  // dot.li host: the web host returns no raw wallet accounts, only a per-app
-  // PRODUCT ACCOUNT derived from the user's root session + this identifier, and
-  // it MUST match the deployed domain or the host rejects the request with
-  // DomainNotValid. Omit only outside a host (no account available anyway).
+  // The app's `.dot` identifier (e.g. "arcade-snake.dot"). Used as the product
+  // identifier the host scopes the per-app account to. RPS uses
+  // window.location.host VERBATIM (its getProductIdentifier): Polkadot Desktop
+  // accepts the raw host for both `.dot` domains and `localhost:PORT`, and the
+  // signing-permission check matches the identifier against that same host
+  // context — appending/derived labels makes the signer's identifier diverge and
+  // signing is denied. We therefore prefer window.location.host and fall back to
+  // this configured identifier (then a constant) when there is no window.
   dotNsIdentifier?: string;
 }
 
+// Identifier the host uses to scope our product. RPS getProductIdentifier:
+// window.location.host verbatim, with a sensible fallback.
+function getProductIdentifier(fallback?: string): string {
+  if (typeof window !== "undefined" && window.location.host) {
+    return window.location.host;
+  }
+  return fallback ?? "arcade-game.dot";
+}
+
 export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway {
-  const manager = new SignerManager({
-    dappName: options.dappName ?? "arcade-game",
-    ss58Prefix: options.ss58Prefix ?? 0,
-    // Product-account path (SPEC §8.1, revised per item 6): the host derives a
-    // per-app keypair for this identifier. Without it, connect() falls through
-    // to getLegacyAccounts() which the web host returns empty → "no accounts".
-    ...(options.dotNsIdentifier
-      ? { productAccount: { dotNsIdentifier: options.dotNsIdentifier, derivationIndex: 0 } }
-      : {}),
-  });
+  const identifier = getProductIdentifier(options.dotNsIdentifier);
+  const derivationIndex = 0;
 
   let connected: Connected | null = null;
+  let lastInHost = false;
   let orderingCache: ScoreOrdering | null = null;
+  let chainSubmitGranted = false;
+  let mapped = false;
+  const listeners = new Set<() => void>();
+
+  function notify() {
+    for (const cb of listeners) cb();
+  }
+
+  // Build the cached `connected` identity from a fetched product-account public
+  // key. Derives the SS58 (RPS: accountIdCodec.dec(publicKey)) and the H160 the
+  // contract maps the caller to (RPS: ss58ToH160(ss58)). The signer uses the
+  // "createTransaction" signerType (REQUIRED — see the module header).
+  function adopt(publicKey: Uint8Array): Connected {
+    const productAccount: ProductAccount = {
+      dotNsIdentifier: identifier,
+      derivationIndex,
+      publicKey,
+    };
+    const signer = accountsProvider.getProductAccountSigner(productAccount, "createTransaction");
+    const ss58 = accountIdCodec.dec(publicKey);
+    const h160 = ss58ToH160(ss58 as never) as `0x${string}`;
+    return { ss58, signer, h160, productAccount };
+  }
+
+  // Attempt the (prompt-free) product-account fetch and map the outcome to
+  // session state. This is the RPS connect flow used both for detection and for
+  // the explicit connect():
+  //   success                          → SIGNED IN (account available)
+  //   RequestCredentialsErr.NotConnected → in-host but not signed in (guest)
+  //   any other error                  → guest/error (a host responded)
+  //   thrown (transport)               → standalone (no host responded)
+  // Returns { inHost } so detectSession can preserve the App.tsx 3-state UI.
+  async function refresh(): Promise<{ inHost: boolean }> {
+    // sandboxTransport.isCorrectEnvironment() is the host-vs-standalone probe.
+    // When false we are standalone: no host to ask, definitely guest.
+    if (!sandboxTransport.isCorrectEnvironment()) {
+      const changed = connected !== null || lastInHost !== false;
+      connected = null;
+      lastInHost = false;
+      if (changed) notify();
+      return { inHost: false };
+    }
+
+    try {
+      const result = await accountsProvider.getProductAccount(identifier, derivationIndex);
+      if (result.isErr()) {
+        // A host responded (so inHost = true), we just have no signed-in session.
+        connected = null;
+        lastInHost = true;
+        notify();
+        if (result.error instanceof RequestCredentialsErr.NotConnected) {
+          return { inHost: true };
+        }
+        // DomainNotValid / Rejected / Unknown — still in-host, still guest.
+        return { inHost: true };
+      }
+      connected = adopt(result.value.publicKey);
+      lastInHost = true;
+      notify();
+      return { inHost: true };
+    } catch {
+      // Hard transport failure → no host responded → standalone guest.
+      connected = null;
+      lastInHost = false;
+      notify();
+      return { inHost: false };
+    }
+  }
+
+  // Kick off a prompt-free detection at construction so subscribers transition
+  // from the synchronous default to the real state without an explicit connect.
+  let detectStarted = false;
+  function ensureDetectStarted() {
+    if (detectStarted) return;
+    detectStarted = true;
+    void refresh();
+  }
 
   async function readOrdering(): Promise<ScoreOrdering> {
     if (orderingCache !== null) return orderingCache;
@@ -95,23 +183,23 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
     return getClient().getUnsafeApi();
   }
 
-  // Adopt the passively-connected host account into the cached `connected`
-  // identity, WITHOUT prompting. Called from detectSession()/subscribeSession()
-  // when getState() already reports a selected host account (e.g. the user is
-  // signed in inside the host). Mirrors connect()'s derivation so reads/writes
-  // use the SAME H160 (see the caller-H160 note above; item-6 open question:
-  // confirm ss58ToEthereum(address) === the contract's caller() in a real host).
-  function adoptFromState(): void {
-    const state = manager.getState();
-    const account = state.status === "connected" ? state.selectedAccount : null;
-    if (!account) {
-      connected = null;
-      return;
+  // RFC-0002 permission: the host requires explicit ChainSubmit approval before
+  // we submit a tx. RPS's ensurePermission pattern — request once, cache the
+  // grant. requestPermission returns a neverthrow Result.
+  async function ensureChainSubmit(): Promise<void> {
+    if (chainSubmitGranted) return;
+    try {
+      const result = await requestPermission({ tag: "ChainSubmit", value: undefined });
+      if (result.isOk() && result.value) {
+        chainSubmitGranted = true;
+      }
+      // If denied/errored we still attempt the tx; the host enforces the gate
+      // and surfaces a clear signing error — we don't want to mask a host that
+      // simply doesn't require the permission in dev.
+    } catch {
+      // Permission request not available (e.g. dev) — proceed and let the tx
+      // path surface any real authorization failure.
     }
-    if (connected && connected.ss58 === account.address) return;
-    const signer = account.getSigner();
-    const h160 = ss58ToEthereum(account.address).asHex() as `0x${string}`;
-    connected = { ss58: account.address, signer, h160 };
   }
 
   return {
@@ -122,53 +210,77 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
     },
 
     detectSession(): SessionInfo {
-      // PROMPT-FREE: only getState() + the sync heuristic. Never connect().
-      adoptFromState();
+      // PROMPT-FREE: getProductAccount is itself prompt-free (it returns
+      // NotConnected when nobody is signed in rather than opening a login UI).
+      // We start it asynchronously and report the latest known state; the App
+      // re-reads via subscribeSession when refresh() resolves.
+      ensureDetectStarted();
       return {
-        inHost: isInsideHostSync(),
+        inHost: connected !== null || lastInHost,
         account: connected ? { ss58: connected.ss58, h160: connected.h160 } : null,
       };
     },
 
     subscribeSession(cb: () => void): () => void {
-      // SignerManager.subscribe fires on every state mutation (incl. after
-      // connect() resolves and on host-driven account changes). Re-derive the
-      // cached identity, then notify the UI to re-read detectSession().
-      return manager.subscribe(() => {
-        adoptFromState();
-        cb();
+      listeners.add(cb);
+      ensureDetectStarted();
+      // Keep the cached identity current with host-driven connection changes
+      // (sign-in / sign-out inside the host) without prompting.
+      const sub = accountsProvider.subscribeAccountConnectionStatus(() => {
+        void refresh();
       });
+      return () => {
+        listeners.delete(cb);
+        try {
+          sub?.unsubscribe?.();
+        } catch {
+          /* ignore */
+        }
+      };
     },
 
-    async connect() {
-      // SPEC §8.1: connect the HOST wallet account. SignerManager defaults to
-      // the host provider; selectAccount picks the active one.
-      const res = await manager.connect("host");
-      if (!res.ok) throw res.error;
-      const accounts = res.value;
-      const account = manager.getState().selectedAccount ?? accounts[0];
-      if (!account) throw new Error("No host wallet account available to sign in.");
-      manager.selectAccount(account.address);
-      const signer = manager.getSigner();
-      if (!signer) throw new Error("Host wallet did not provide a signer.");
-      const h160 = ss58ToEthereum(account.address).asHex() as `0x${string}`;
-      connected = { ss58: account.address, signer, h160 };
-      return h160;
+    async connect(): Promise<`0x${string}`> {
+      // Explicit, prompt-allowed sign-in. If the user isn't connected yet, open
+      // the host login UI (RPS signIn), then re-fetch the product account.
+      let res = await refresh();
+      if (!connected && res.inHost) {
+        try {
+          await accountsProvider.requestLogin("Sign in to save your score");
+        } catch {
+          /* user may already be logged in; fall through to re-fetch */
+        }
+        res = await refresh();
+      }
+      if (!connected) {
+        throw new Error(
+          res.inHost
+            ? "Host did not return a product account after sign-in."
+            : "Open this game in the Polkadot app to sign in.",
+        );
+      }
+      return connected.h160;
     },
 
     async ensureMapped() {
       if (!connected) throw new Error("Sign in before mapping the account.");
+      if (mapped) return;
+      await ensureChainSubmit();
       const sdk = inkSdkBest();
+      // pallet_revive on Paseo Next v2 requires every SS58 origin that calls a
+      // contract to have an explicit map_account entry. ensureAccountMapped is
+      // idempotent (short-circuits when storage already has the entry).
       await ensureAccountMapped(
         connected.ss58,
         connected.signer,
         { addressIsMapped: (addr: string) => sdk.addressIsMapped(addr) },
         reviveApi(),
       );
+      mapped = true;
     },
 
     async submitScore(score) {
       if (!connected) throw new Error("Sign in before submitting a score.");
+      await ensureChainSubmit();
       const contract = gcsContract();
       if (!contract) throw new Error("GCS contract is not deployed (missing from cdm.json).");
       // Dry-run at best-block, then submit the dry-run's own tx (fills gas +

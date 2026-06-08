@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import type { FakeGatewayConfig } from "../../src/scoreboard/fake-gateway";
+import cdm from "../../cdm.json" with { type: "json" };
 
 // E2E for the SPEC §8.3 guest / save-score / sign-in flows. The chain is faked
 // at the ChainGateway seam (src/scoreboard/fake-gateway.ts), wired in by App.tsx
@@ -9,9 +10,14 @@ import type { FakeGatewayConfig } from "../../src/scoreboard/fake-gateway";
 // window.__snakeForceGameOver hook.
 
 // The in-game guest-store key is `arcade:guest-best:<gameKey>` where gameKey is
-// the deployed GCS address from cdm.json (App.tsx: getGcsAddress()). Fixed for
-// this template; if cdm.json's address changes, update this.
-const GAME_KEY = "0x5d38af8b84c06d26113d94b596ccca99f2078acc";
+// the deployed GCS address from cdm.json (App.tsx: getGcsAddress()). Derive it
+// the SAME way the app does, so a redeploy that rewrites cdm.json's address
+// never silently diverges the test key from the app's (which previously caused
+// false failures here).
+const _cdmContracts = (cdm as { contracts: Record<string, Record<string, { address?: string }>> }).contracts;
+const _target = Object.keys(_cdmContracts)[0];
+const GAME_KEY =
+  _cdmContracts[_target]?.["@arcade/gcs-reference"]?.address ?? "local";
 const GUEST_BEST_KEY = `arcade:guest-best:${GAME_KEY}`;
 
 const SIGNED_IN_PLAYER = "0x00000000000000000000000000000000000000bb" as const;

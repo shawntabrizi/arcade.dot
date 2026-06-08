@@ -10,8 +10,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { createClient, Binary } from "polkadot-api";
-import { getWsProvider } from "polkadot-api/ws-provider";
+import { createClient } from "polkadot-api";
+import { getWsProvider } from "@polkadot-api/ws-provider";
 import { createInkSdk } from "@polkadot-api/sdk-ink";
 
 import {
@@ -64,7 +64,9 @@ async function main() {
 
     summary.mapping = await ensureMapped(client, inkSdk, account);
 
-    const deployer = inkSdk.getDeployer({ abi: gcsAbi }, Binary.fromBytes(new Uint8Array(gcsCode)));
+    // sdk-ink 0.7.0 / polkadot-api 2.x: getDeployer takes raw code bytes
+    // (Uint8Array); the 1.x `Binary.fromBytes` wrapper is gone.
+    const deployer = inkSdk.getDeployer({ abi: gcsAbi }, new Uint8Array(gcsCode));
     const ctorData = {
       registry,
       score_ordering: config.contract.scoreOrdering,

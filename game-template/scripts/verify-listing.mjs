@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { createClient } from "polkadot-api";
-import { getWsProvider } from "polkadot-api/ws-provider";
+import { getWsProvider } from "@polkadot-api/ws-provider";
 import { createInkSdk } from "@polkadot-api/sdk-ink";
 
 import {

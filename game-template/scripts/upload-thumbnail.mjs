@@ -10,8 +10,8 @@
 
 import { readFileSync } from "node:fs";
 
-import { createClient, Binary } from "polkadot-api";
-import { getWsProvider } from "polkadot-api/ws-provider";
+import { createClient } from "polkadot-api";
+import { getWsProvider } from "@polkadot-api/ws-provider";
 import { createCID } from "bulletin-deploy/deploy";
 import { ensureAuthorized } from "bulletin-deploy";
 
@@ -132,7 +132,9 @@ async function main() {
 
     const tx = unsafeApi.tx.TransactionStorage.store_with_cid_config({
       cid: { codec: 85n, hashing: { type: "Sha2_256", value: undefined } },
-      data: Binary.fromBytes(new Uint8Array(bytes)),
+      // polkadot-api 2.x: a Vec<u8> tx arg takes raw bytes (Uint8Array); the
+      // 1.x `Binary.fromBytes` wrapper is gone.
+      data: new Uint8Array(bytes),
     });
     await submitInBlock(tx, account.signer, "TransactionStorage.store");
     summary.gatewayUrl = `${BULLETIN_GATEWAY}${cid}`;
