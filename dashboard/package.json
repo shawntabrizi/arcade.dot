@@ -14,6 +14,9 @@
   },
   "dependencies": {
     "@dotdm/cdm": "0.5.8",
+    "@novasamatech/host-api": "^0.8.6",
+    "@novasamatech/host-api-wrapper": "^0.8.6",
+    "@parity/product-sdk-host": "^0.8.0",
     "@polkadot-api/sdk-ink": "^0.6.2",
     "polkadot-api": "^1.23.3",
     "react": "^19.0.0",

@@ -4,6 +4,7 @@
 // footer (contract address → explorer, registered/updated dates).
 
 import { useEffect, useState } from "react";
+import { getTruApi, isInsideContainerSync } from "@parity/product-sdk-host";
 import { useReads } from "../reads-context";
 import { bucketGameType, relativeTime, toLaunchUrl } from "../logic";
 import { homeHref } from "../router";
@@ -84,6 +85,23 @@ export function GameDetail({ address, blockKey }: { address: Address; blockKey: 
   const launchUrl = toLaunchUrl(listing.playUrl);
   const chip = bucketGameType(listing.gameType);
 
+  // Inside a Triangle host (desktop/web/mobile), target=_blank/window.open and
+  // same-frame nav are sandbox-blocked, so the plain anchor does nothing. Route
+  // through the host API instead: handleNavigateTo opens the .dot app (desktop
+  // → in-app router; web → top-frame window.open). Outside a host (plain
+  // browser, e2e) isInsideContainerSync() is false → no-op, anchor behaves
+  // exactly as before. preventDefault() runs synchronously, before any await,
+  // so the anchor's default nav is reliably cancelled in-host.
+  const onPlay = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (launchUrl && isInsideContainerSync()) {
+      e.preventDefault();
+      void getTruApi().then((t) => {
+        // navigateTo takes a versioned envelope { tag, value }; value is the URL.
+        t?.navigateTo({ tag: "v1", value: launchUrl });
+      });
+    }
+  };
+
   return (
     <article className="detail">
       <a className="link detail__back" href={homeHref()}>
@@ -104,9 +122,16 @@ export function GameDetail({ address, blockKey }: { address: Address; blockKey: 
           </div>
           <p className="hero__desc">{listing.shortDescription}</p>
           {launchUrl ? (
-            // SPEC §7.5: plain anchor, target=_blank rel=noopener. Same-frame
-            // nav and window.open are sandbox-blocked — MUST NOT be used.
-            <a className="btn btn--play" href={launchUrl} target="_blank" rel="noopener">
+            // SPEC §7.5: plain anchor, target=_blank rel=noopener for plain
+            // browsers. onPlay intercepts only when inside a host (where
+            // target=_blank is sandbox-blocked) and routes via the host API.
+            <a
+              className="btn btn--play"
+              href={launchUrl}
+              target="_blank"
+              rel="noopener"
+              onClick={onPlay}
+            >
               ▶ Play
             </a>
           ) : (
