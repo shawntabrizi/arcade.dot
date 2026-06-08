@@ -141,6 +141,35 @@ Test gates: contracts → `cargo test`; template/dashboard logic → unit tests
 - [ ] 17. Dress rehearsal: fresh end-to-end run (prompt → listed game →
       visible on dashboard); fix what breaks; record results here.
 
+## MVP TODO — fund the product account so scores can save (storage deposit)
+
+⚠ BLOCKS the "play + save" loop for any FRESH game. Root cause (verified, two
+investigations): each game uses its own per-app product account (host-enforced —
+a deployed `.dot` must sign as its own `<label>.dot`; subdomains do NOT share an
+account because signing is locked per-label). A fresh product account has ZERO
+balance, and a pallet_revive contract call's STORAGE DEPOSIT is reserved from the
+signer's free balance — the host sponsors FEES (AsPgas) but NOT deposits. So the
+first save reverts `Revive::StorageDepositNotEnoughFunds`. (The `AccountUnmapped`
+layer is already fixed; this is the next one. Batching is NOT the cause — keep the
+single-signature batch.)
+
+Funding model (per the user): product accounts are funded via a FAUCET; the app
+opens the faucet with `?address=<the product account>` (faucet is itself a
+product account derived `root-seed//faucet.dot//0`). On paseo-next-v2 use the
+IN-HOST `faucet.dot` (NOT public faucet.polkadot.io, which funds standard Paseo —
+the wrong chain).
+
+Plan (paused, pending faucet URL/param confirmation): on sign-in, check the
+product account's free balance; if too low for map + a leaderboard-entry deposit,
+surface a "Get test funds" action that opens the faucet with the product
+account's SS58 (`connected.ss58`), then retry. Keep the batched map+submit. Wire
+in game-template/src/scoreboard/sdk-gateway.ts (+ a UI affordance in App.tsx).
+Then redeploy the 5 game frontends. NOTE: this is per-account, so the bundled-
+arcade-app model (all games at one origin → one shared account) would make
+funding one-time — a separate architectural decision (SPEC §8.1).
+TO CONFIRM with user before building: exact faucet URL (faucet.dot →
+https://faucet.dot.li/?address=…?) and whether `?address=` is SS58 or H160.
+
 ## Known issues (found while playing locally)
 
 - **Read origin must be pallet_revive-mapped** — FIXED. The dashboard's read
