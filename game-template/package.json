@@ -20,6 +20,7 @@
     "arcade:ship": "node scripts/ship.mjs"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
     "@novasamatech/host-api": "^0.8.4",
     "@novasamatech/host-api-wrapper": "^0.8.4",
     "@parity/product-sdk-address": "^0.1.1",
