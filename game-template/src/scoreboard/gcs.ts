@@ -2,8 +2,19 @@ import { createClient, type PolkadotClient } from "polkadot-api";
 // polkadot-api 2.x removed the `polkadot-api/ws-provider/*` subpaths; the WS
 // provider now ships as the standalone `@polkadot-api/ws-provider` package.
 import { getWsProvider } from "@polkadot-api/ws-provider";
+// Route chain access THROUGH the host instead of dialing the RPC directly.
+// A direct WebSocket to the Asset Hub RPC is an external-domain request, so the
+// host prompts "Allow access to web domains?" just to read/write the chain.
+// createPapiProvider tunnels JSON-RPC through the host's own chain connection
+// (no external request, no prompt), with the WS provider as the fallback.
+import { createPapiProvider } from "@novasamatech/host-api-wrapper";
 import { createInkSdk } from "@polkadot-api/sdk-ink";
 import cdmJson from "../../cdm.json";
+
+// Paseo Next v2 — Asset Hub genesis. The host routes chain access by genesis
+// hash; this must match the chain `assetHubEndpoint()` points at.
+const ASSET_HUB_GENESIS =
+  "0x173cea9df45656cf612c8b8ece56e04e9a693c69cfaac47d3628dae735067af8" as const;
 
 // The one game contract the template talks to: the GCS reference (SPEC §4.6).
 // Its ABI is identical for every conforming game (SPEC §7.4); the deployed
@@ -56,9 +67,21 @@ export function assetHubEndpoint(): string {
   return ep;
 }
 
+// Direct WS only when there is no host to tunnel through: Node (smoke/boot
+// harnesses, `typeof window === "undefined"`) and local dev (`localhost`).
+// createPapiProvider traps without a host, so we must not use it there.
+function chainProvider(endpoint: string) {
+  const directWs =
+    typeof window === "undefined" ||
+    /^localhost(:\d+)?$/.test(window.location.host);
+  return directWs
+    ? getWsProvider(endpoint)
+    : createPapiProvider(ASSET_HUB_GENESIS, getWsProvider(endpoint));
+}
+
 let client: PolkadotClient | null = null;
 export function getClient(): PolkadotClient {
-  if (!client) client = createClient(getWsProvider(assetHubEndpoint()));
+  if (!client) client = createClient(chainProvider(assetHubEndpoint()));
   return client;
 }
 

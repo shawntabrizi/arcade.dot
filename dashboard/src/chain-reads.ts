@@ -7,9 +7,23 @@
 // is left as a documented TODO (item 13/host adoption).
 
 import { createClient, type PolkadotClient } from "polkadot-api";
-import { getWsProvider } from "polkadot-api/ws-provider/web";
+// polkadot-api 2.x removed the `polkadot-api/ws-provider/*` subpaths; the WS
+// provider now ships as the standalone `@polkadot-api/ws-provider` package
+// (matching game-template). 2.x also aligns the JSON-RPC provider shape with
+// host-api-wrapper's createPapiProvider (parsed messages, not strings).
+import { getWsProvider } from "@polkadot-api/ws-provider";
+// Route reads THROUGH the host (not a direct RPC WebSocket) so reading the
+// chain doesn't trigger the host's "Allow access to web domains?" prompt.
+// createPapiProvider tunnels JSON-RPC over the host's own chain connection,
+// falling back to the WS provider when there is no host. See game-template
+// scoreboard/gcs.ts for the matching write-side setup.
+import { createPapiProvider } from "@novasamatech/host-api-wrapper";
 import { createInkSdk } from "@polkadot-api/sdk-ink";
 import cdmJson from "../cdm.json";
+
+// Paseo Next v2 — Asset Hub genesis (host routes chain access by genesis hash).
+const ASSET_HUB_GENESIS =
+  "0x173cea9df45656cf612c8b8ece56e04e9a693c69cfaac47d3628dae735067af8" as const;
 import dotnsReverseResolverAbi from "./abis/DotnsReverseResolver.json";
 import type { ArcadeReads } from "./arcade-reads";
 import {
@@ -88,9 +102,21 @@ function gcsAbi(): unknown[] {
   return e.abi;
 }
 
+// Direct WS only when there is no host to tunnel through: Node (the live smoke
+// test, `typeof window === "undefined"`) and local dev (`localhost`).
+// createPapiProvider traps without a host, so we must not use it there.
+function chainProvider(endpoint: string) {
+  const directWs =
+    typeof window === "undefined" ||
+    /^localhost(:\d+)?$/.test(window.location.host);
+  return directWs
+    ? getWsProvider(endpoint)
+    : createPapiProvider(ASSET_HUB_GENESIS, getWsProvider(endpoint));
+}
+
 let _client: PolkadotClient | null = null;
 function client(): PolkadotClient {
-  if (!_client) _client = createClient(getWsProvider(assetHubEndpoint()));
+  if (!_client) _client = createClient(chainProvider(assetHubEndpoint()));
   return _client;
 }
 
