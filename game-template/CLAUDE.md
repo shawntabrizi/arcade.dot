@@ -164,7 +164,9 @@ non-points unit (moves, guesses, laps); use `0` for plain points and leave
 
 The look is **structural**, not yours to change. The template provides the
 **2:3 portrait game surface**, the **mobile/desktop layout**, the **bottom tab
-bar**, and the **game-over save sheet**. Your game component fills 100% of the
+bar** (Play · Scores · Recent · Account), the **game-over Last/Best + submit
+affordance**, and the **Account tab** (product-account derivation, address,
+balance, mapping status, and faucet). Your game component fills 100% of the
 surface and styles **only its own gameplay inside it**.
 
 - **Do not** edit `src/App.css`, `src/tokens.css`, `tailwind.config.js`, the

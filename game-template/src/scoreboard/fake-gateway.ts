@@ -28,12 +28,22 @@ export interface FakeGatewayConfig {
   // SS58 paired with `player` for detectSession()'s pre-connected account. Only
   // its presence matters to the UI; defaults to a placeholder when omitted.
   playerSs58?: string;
+  // Account-tab fixtures (SPEC §8.1). Free/reserved balance in planck, mapping
+  // status, and the .dot identifier/index the tab displays.
+  free?: number;
+  reserved?: number;
+  mapped?: boolean;
+  identifier?: string;
+  derivationIndex?: number;
+  decimals?: number;
+  symbol?: string;
 }
 
 export interface FakeGatewayState {
   connectCalls: number;
   mappedCalls: number;
   submits: number[];
+  mapAccountCalls: number;
 }
 
 // Surfaced on window so the test runner (and the running app) share one object.
@@ -56,7 +66,7 @@ function handle(): FakeGatewayHandle {
   if (!window.__ARCADE_FAKE__) {
     window.__ARCADE_FAKE__ = {
       config: {},
-      state: { connectCalls: 0, mappedCalls: 0, submits: [] },
+      state: { connectCalls: 0, mappedCalls: 0, submits: [], mapAccountCalls: 0 },
     };
   }
   return window.__ARCADE_FAKE__;
@@ -71,6 +81,24 @@ export function createFakeGateway(): ChainGateway {
   return {
     async scoreOrdering() {
       return h.config.ordering ?? 0;
+    },
+    async accountDetails() {
+      if (!player) return null;
+      return {
+        identifier: h.config.identifier ?? "arcade-test.dot",
+        derivationIndex: h.config.derivationIndex ?? 0,
+        ss58: ss58 ?? "fake-ss58",
+        h160: player,
+        free: BigInt(h.config.free ?? 0),
+        reserved: BigInt(h.config.reserved ?? 0),
+        mapped: h.config.mapped ?? false,
+        decimals: h.config.decimals ?? 10,
+        symbol: h.config.symbol ?? "PAS",
+      };
+    },
+    async mapAccount() {
+      h.state.mapAccountCalls = (h.state.mapAccountCalls ?? 0) + 1;
+      if (h.config) h.config.mapped = true;
     },
     currentPlayer() {
       return player;

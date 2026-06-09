@@ -60,6 +60,24 @@ export function createLocalGateway(ordering: ScoreOrdering = 0): ChainGateway {
     async scoreOrdering() {
       return ordering;
     },
+    async accountDetails() {
+      // Offline: a deterministic local player, no real chain balance/mapping.
+      if (!connected) return null;
+      return {
+        identifier: "local",
+        derivationIndex: 0,
+        ss58: LOCAL_PLAYER,
+        h160: LOCAL_PLAYER,
+        free: 0n,
+        reserved: 0n,
+        mapped: false,
+        decimals: 10,
+        symbol: "PAS",
+      };
+    },
+    async mapAccount() {
+      // No chain offline — mapping is a no-op.
+    },
     currentPlayer() {
       return connected ? LOCAL_PLAYER : null;
     },

@@ -208,9 +208,12 @@ test("7. IN-HOST GUEST on load: nudge + a 'Sign in' action available NOW (pre ga
   page,
 }) => {
   await boot(page, { ordering: 0, player: null, inHost: true, connectsTo: CONNECTS_TO });
-  await expect(page.getByText("in the Polkadot app", { exact: false })).toBeVisible();
+  // Scope to the Play-panel status line (the Account panel also shows a sign-in
+  // prompt, which on desktop is visible at the same time).
+  const status = page.locator('[data-session="in-host-guest"]');
+  await expect(status.getByText("in the Polkadot app", { exact: false })).toBeVisible();
 
-  const signIn = page.getByRole("button", { name: "Sign in", exact: true });
+  const signIn = status.getByRole("button", { name: "Sign in", exact: true });
   await expect(signIn).toBeVisible();
   // No connect() until the user clicks (detection is prompt-free).
   expect(await page.evaluate(() => window.__ARCADE_FAKE__?.state.connectCalls)).toBe(0);
@@ -222,7 +225,8 @@ test("7. IN-HOST GUEST on load: nudge + a 'Sign in' action available NOW (pre ga
 
 test("8. STANDALONE GUEST on load: guest message, NO sign-in button", async ({ page }) => {
   await boot(page, { ordering: 0, player: null, inHost: false });
-  await expect(page.getByText("open this game in the Polkadot app", { exact: false })).toBeVisible();
+  const status = page.locator('[data-session="standalone-guest"]');
+  await expect(status.getByText("open this game in the Polkadot app", { exact: false })).toBeVisible();
   // Sign-in is unavailable standalone (connect would fail) — no button offered.
   await expect(page.getByRole("button", { name: "Sign in", exact: true })).toHaveCount(0);
 });

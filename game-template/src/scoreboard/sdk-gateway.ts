@@ -221,6 +221,74 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
   return {
     scoreOrdering: readOrdering,
 
+    async accountDetails() {
+      if (!connected) return null;
+      const api = reviveApi();
+      let free = 0n;
+      let reserved = 0n;
+      try {
+        const acct = await api.query.System.Account.getValue(connected.ss58);
+        free = acct?.data?.free ?? 0n;
+        reserved = acct?.data?.reserved ?? 0n;
+      } catch {
+        /* leave zeros — balance read is best-effort, never blocks the tab */
+      }
+      try {
+        mapped = await inkSdkBest().addressIsMapped(connected.ss58);
+      } catch {
+        /* keep the last-known mapping flag */
+      }
+      let decimals = 10;
+      let symbol = "PAS";
+      try {
+        const spec = await getClient().getChainSpecData();
+        const props = (spec?.properties ?? {}) as {
+          tokenDecimals?: number | number[];
+          tokenSymbol?: string | string[];
+        };
+        const d = Array.isArray(props.tokenDecimals) ? props.tokenDecimals[0] : props.tokenDecimals;
+        const s = Array.isArray(props.tokenSymbol) ? props.tokenSymbol[0] : props.tokenSymbol;
+        if (typeof d === "number") decimals = d;
+        if (typeof s === "string" && s) symbol = s;
+      } catch {
+        /* fall back to PAS / 10 decimals */
+      }
+      return {
+        identifier,
+        derivationIndex,
+        ss58: connected.ss58,
+        h160: connected.h160,
+        free,
+        reserved,
+        mapped,
+        decimals,
+        symbol,
+      };
+    },
+
+    async mapAccount() {
+      if (!connected) throw new Error("Sign in before mapping your account.");
+      if (await inkSdkBest().addressIsMapped(connected.ss58)) {
+        mapped = true;
+        return;
+      }
+      await ensureChainSubmit();
+      const result = await batchSubmitAndWatch(
+        [reviveApi().tx.Revive.map_account()],
+        reviveApi(),
+        connected.signer,
+        { mode: "batch_all", waitFor: "best-block" },
+      );
+      if (!result.ok) {
+        throw new Error(
+          `map_account reverted: ${JSON.stringify(result.dispatchError, (_k: string, v: unknown) =>
+            typeof v === "bigint" ? v.toString() : v,
+          )}`,
+        );
+      }
+      mapped = true;
+    },
+
     currentPlayer() {
       return connected?.h160 ?? null;
     },

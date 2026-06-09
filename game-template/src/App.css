@@ -295,13 +295,24 @@ body {
     align-items: center;
     justify-content: flex-start;
     grid-column: 1;
+    grid-row: 1 / span 2;
   }
 
   .panel-boards {
     grid-column: 2;
+    grid-row: 1;
   }
 
-  .panel-boards > div {
+  /* Account stacks under the boards in the right column on desktop (on mobile
+     it's its own tab). */
+  .panel-account {
+    grid-column: 2;
+    grid-row: 2;
+    margin-top: 28px;
+  }
+
+  .panel-boards > div,
+  .panel-account > div {
     padding: 0;
     max-width: none;
   }

@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Gamepad2, Trophy, History, ChevronLeft } from "lucide-react";
+import { Gamepad2, Trophy, History, ChevronLeft, User, Copy, Check } from "lucide-react";
+import { getTruApi, isInsideContainerSync } from "@parity/product-sdk-host";
 import { ActiveGame, ACTIVE_GAME_TITLE } from "./games/active";
 import type { ScoreEntry, ScoreOrdering } from "./scoreboard/api";
+import type { AccountDetails } from "./scoreboard/gateway";
 import { Leaderboard, shortAddress } from "./scoreboard/Leaderboard";
 import { contractScoreboard, isContractDeployed } from "./scoreboard/reads";
 import { Scoreboard, pickBetter } from "./scoreboard/scoreboard";
 import { createSdkGateway } from "./scoreboard/sdk-gateway";
 import { createFakeGateway } from "./scoreboard/fake-gateway";
 import { getGcsAddress } from "./scoreboard/gcs";
+import { derivationPath, faucetUrl, formatBalance } from "./account";
 import arcadeConfig from "../arcade.config.json";
 
 // ⚠ TEST-ONLY seam (SPEC §8.3 Playwright flows). When VITE_ARCADE_FAKE_GATEWAY
@@ -62,7 +65,63 @@ const GAME_KEY = getGcsAddress() ?? "local";
 // persists across replays instead of vanishing after a non-best round; `phase`
 // only tracks the actual save round-trip.
 type Phase = "idle" | "submitting" | "submitted" | "error";
-type Tab = "play" | "scores" | "recent";
+type Tab = "play" | "scores" | "recent" | "account";
+
+// Open the host faucet prefilled with an address. Inside the host this MUST go
+// through navigateTo (the desktop webview denies window.open / target=_blank);
+// standalone web falls back to a new tab. faucet.dot.li is itself a host app.
+function openFaucet(ss58: string): void {
+  const url = faucetUrl(ss58);
+  if (isInsideContainerSync()) {
+    void getTruApi().then((t) => {
+      t?.navigateTo({ tag: "v1", value: url });
+    });
+  } else {
+    window.open(url, "_blank", "noopener");
+  }
+}
+
+// Truncate an SS58 for display (shortAddress is H160-shaped; SS58 isn't 0x).
+function shortSs58(ss58: string): string {
+  return ss58.length > 14 ? `${ss58.slice(0, 6)}…${ss58.slice(-6)}` : ss58;
+}
+
+// One labelled, copyable address row (used for both the SS58 and H160).
+function AddressRow({
+  label,
+  full,
+  short,
+  copyKey,
+  copied,
+  onCopy,
+}: {
+  label: string;
+  full: string;
+  short: string;
+  copyKey: string;
+  copied: string | null;
+  onCopy: (key: string, text: string) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <div className="min-w-0">
+        <p className="text-xs text-secondary m-0">{label}</p>
+        <code className="text-sm text-primary break-all" title={full}>
+          {short}
+        </code>
+      </div>
+      <button
+        type="button"
+        onClick={() => onCopy(copyKey, full)}
+        aria-label={`Copy ${label}`}
+        className="shrink-0 inline-flex items-center gap-1 bg-surface-nested text-secondary hover:text-primary rounded-small px-2 py-1 text-xs transition-colors cursor-pointer"
+      >
+        {copied === copyKey ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+        {copied === copyKey ? "Copied" : "Copy"}
+      </button>
+    </div>
+  );
+}
 
 export function App() {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -80,6 +139,13 @@ export function App() {
   // Optimistic: the player's just-played score, shown on the board immediately
   // and reconciled when the real submit lands. Only set once submitted.
   const [pendingEntry, setPendingEntry] = useState<ScoreEntry | null>(null);
+  // Account tab (SPEC §8.1): the connected product account + balance + mapping,
+  // loaded on demand when the tab is open and signed in.
+  const [account, setAccount] = useState<AccountDetails | null>(null);
+  const [accountLoading, setAccountLoading] = useState(false);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [mapping, setMapping] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
 
   // One Scoreboard for the session, over the real product-sdk gateway. The
   // gateway is the only thing that touches the chain (SPEC §8.1).
@@ -205,6 +271,46 @@ export function App() {
       setPhase("error");
     }
   }, [scoreboard, showOptimistic]);
+
+  // Account tab: fetch the product account + balance + mapping (SPEC §8.1).
+  const loadAccount = useCallback(async () => {
+    setAccountLoading(true);
+    setAccountError(null);
+    try {
+      setAccount(await scoreboard.accountDetails());
+    } catch (err) {
+      setAccountError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAccountLoading(false);
+    }
+  }, [scoreboard]);
+
+  // Load (and refresh) account details when the tab is open and signed in. Also
+  // re-runs after a score submit (refreshKey) so the balance/mapping stay live.
+  useEffect(() => {
+    if (tab === "account" && signedIn) void loadAccount();
+  }, [tab, signedIn, refreshKey, loadAccount]);
+
+  // Map the product account on its own (pallet_revive), then refresh the tab.
+  const mapNow = useCallback(async () => {
+    setMapping(true);
+    setAccountError(null);
+    try {
+      await scoreboard.mapAccount();
+      await loadAccount();
+    } catch (err) {
+      setAccountError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setMapping(false);
+    }
+  }, [scoreboard, loadAccount]);
+
+  const copy = useCallback((label: string, text: string) => {
+    void navigator.clipboard?.writeText(text).then(() => {
+      setCopied(label);
+      setTimeout(() => setCopied((c) => (c === label ? null : c)), 1500);
+    });
+  }, []);
 
   // The session status line (three honest SPEC §8.1/§8.3 states). Kept in one
   // place so it can sit in the Play panel header on every viewport.
@@ -389,7 +495,7 @@ export function App() {
             active mobile tab toggles which card shows, desktop shows both. ── */}
         <section
           className={`panel panel-boards board-mode-${tab === "recent" ? "recent" : "scores"}`}
-          hidden={tab === "play"}
+          hidden={tab === "play" || tab === "account"}
           aria-label="Scores"
         >
           <div className="w-full max-w-[420px] mx-auto p-4">
@@ -400,6 +506,136 @@ export function App() {
               pendingEntry={pendingEntry}
               ordering={SCORE_ORDERING}
             />
+          </div>
+        </section>
+
+        {/* ── Account panel (mobile: its own tab; desktop: under the boards). The
+            host only exposes the per-app PRODUCT account — the user's root
+            account stays private (SPEC §8.1). ─────────────────────────────── */}
+        <section className="panel panel-account" hidden={tab !== "account"} aria-label="Account">
+          <div className="w-full max-w-[420px] mx-auto p-4 flex flex-col gap-4">
+            <header className="text-center">
+              <h2 className="text-lg font-semibold text-primary m-0">Your account</h2>
+              <p className="text-sm text-secondary m-0 mt-1">
+                How this game identifies you on-chain.
+              </p>
+            </header>
+
+            {!signedIn ? (
+              session.inHost ? (
+                <div className="sheet">
+                  <p className="text-base font-semibold text-primary m-0 mb-3">
+                    Sign in to view your account
+                  </p>
+                  <button
+                    type="button"
+                    onClick={signInNow}
+                    className="bg-action-primary text-primary-inverted font-medium text-sm px-4 py-2 rounded-small hover:bg-action-primary-hover transition-colors cursor-pointer"
+                  >
+                    Sign in
+                  </button>
+                  {error && (
+                    <p className="text-sm text-error m-0 mt-2 break-words">
+                      Couldn&rsquo;t sign in: {error}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-secondary m-0">
+                  Open this game in the Polkadot app to see your account.
+                </p>
+              )
+            ) : accountLoading && !account ? (
+              <p className="text-sm text-secondary m-0">Loading your account…</p>
+            ) : account ? (
+              <>
+                {/* Derivation */}
+                <div className="bg-surface-container rounded-container p-4 flex flex-col gap-2">
+                  <p className="text-sm font-semibold text-primary m-0">Product account</p>
+                  <p className="text-sm text-secondary m-0">
+                    This game uses a per-app account the Polkadot host derives for you:
+                  </p>
+                  <code className="text-xs text-primary bg-surface-nested rounded-small px-2 py-1 break-all">
+                    {derivationPath(account.identifier, account.derivationIndex)}
+                  </code>
+                  <dl className="text-sm m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                    <dt className="text-secondary">App</dt>
+                    <dd className="text-primary m-0">{account.identifier}</dd>
+                    <dt className="text-secondary">Index</dt>
+                    <dd className="text-primary m-0">{account.derivationIndex}</dd>
+                  </dl>
+                  <p className="text-xs text-tertiary m-0">
+                    Your main Polkadot account stays private to the host and isn&rsquo;t shown here.
+                  </p>
+                </div>
+
+                {/* Addresses */}
+                <div className="bg-surface-container rounded-container p-4 flex flex-col gap-3">
+                  <AddressRow
+                    label="Address (SS58)"
+                    full={account.ss58}
+                    short={shortSs58(account.ss58)}
+                    copyKey="ss58"
+                    copied={copied}
+                    onCopy={copy}
+                  />
+                  <AddressRow
+                    label="Contract address (H160)"
+                    full={account.h160}
+                    short={shortAddress(account.h160)}
+                    copyKey="h160"
+                    copied={copied}
+                    onCopy={copy}
+                  />
+                </div>
+
+                {/* Balance, mapping, faucet */}
+                <div className="bg-surface-container rounded-container p-4 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-secondary">Balance</span>
+                    <span className="text-sm font-semibold text-primary">
+                      {formatBalance(account.free, account.decimals)} {account.symbol}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-secondary">Status</span>
+                    {account.mapped ? (
+                      <span className="text-sm text-success">Mapped — ready to save scores</span>
+                    ) : (
+                      <span className="text-sm text-warning">Not mapped</span>
+                    )}
+                  </div>
+                  {!account.mapped && (
+                    <button
+                      type="button"
+                      onClick={mapNow}
+                      disabled={mapping}
+                      className="bg-action-secondary text-primary font-medium text-sm px-4 py-2 rounded-small hover:bg-action-secondary-hover transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {mapping ? "Mapping…" : "Map account to save scores"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => openFaucet(account.ss58)}
+                    className="bg-action-primary text-primary-inverted font-medium text-sm px-4 py-2 rounded-small hover:bg-action-primary-hover transition-colors cursor-pointer"
+                  >
+                    Get test funds
+                  </button>
+                  <p className="text-xs text-tertiary m-0">
+                    Storage deposits for saving scores are reserved from this account — top it up
+                    with the faucet if saving fails.
+                  </p>
+                  {accountError && (
+                    <p className="text-sm text-error m-0 break-words">{accountError}</p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-error m-0 break-words">
+                {accountError ?? "Couldn't load your account."}
+              </p>
+            )}
           </div>
         </section>
       </div>
@@ -432,6 +668,15 @@ export function App() {
         >
           <History size={22} aria-hidden />
           Recent
+        </button>
+        <button
+          type="button"
+          className="tab-item"
+          aria-selected={tab === "account"}
+          onClick={() => setTab("account")}
+        >
+          <User size={22} aria-hidden />
+          Account
         </button>
       </nav>
     </div>

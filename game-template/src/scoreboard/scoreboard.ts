@@ -1,5 +1,5 @@
 import type { ScoreOrdering } from "./api";
-import type { ChainGateway, GuestStore, SessionInfo } from "./gateway";
+import type { AccountDetails, ChainGateway, GuestStore, SessionInfo } from "./gateway";
 
 // Namespaced per game so two template games on the same origin don't collide.
 const GUEST_KEY_PREFIX = "arcade:guest-best:";
@@ -135,6 +135,16 @@ export class Scoreboard {
   // Connect a host wallet account (SPEC §8.1). Returns the player's H160.
   async signIn(): Promise<`0x${string}`> {
     return this.gateway.connect();
+  }
+
+  // Account-tab reads/writes (SPEC §8.1). Passthroughs so the UI never reaches
+  // into the gateway. accountDetails() returns null when nobody is signed in.
+  async accountDetails(): Promise<AccountDetails | null> {
+    return this.gateway.accountDetails();
+  }
+
+  async mapAccount(): Promise<void> {
+    return this.gateway.mapAccount();
   }
 
   // Single entry point for a finished match (one call per onGameEnd). NEVER
