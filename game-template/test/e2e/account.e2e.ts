@@ -77,6 +77,38 @@ test("Account tab: an unmapped account offers Map, and mapping flips the status"
   await expect(page.getByText("ready to save scores")).toBeVisible();
 });
 
+test("desktop: the Account panel loads WITHOUT a tab click (no tab bar on desktop)", async ({
+  page,
+}) => {
+  // On desktop there is no tab bar — all panels show at once and `tab` stays
+  // "play". Regression guard: account details must still load (they were gated
+  // on tab === "account", which never becomes true on desktop → "Couldn't load
+  // your account"). Boot at a desktop width and do NOT click any tab.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.addInitScript((cfg) => {
+    window.localStorage.clear();
+    window.__ARCADE_FAKE__ = {
+      config: cfg as Record<string, unknown>,
+      state: { connectCalls: 0, mappedCalls: 0, submits: [], mapAccountCalls: 0 },
+    } as unknown as Window["__ARCADE_FAKE__"];
+  }, {
+    ordering: 0,
+    player: PLAYER,
+    playerSs58: SS58,
+    identifier: "arcade-snake.dot",
+    free: 15_000_000_000,
+    mapped: true,
+  } as unknown as Record<string, unknown>);
+  await page.goto("/");
+  await expect(page.locator("canvas.snake-canvas")).toBeVisible();
+
+  // No tab interaction — the account card content is present because it loads on
+  // sign-in, and the desktop layout shows the panel unconditionally.
+  await expect(page.getByText("product / arcade-snake.dot / 0")).toBeVisible();
+  await expect(page.getByText("1.5 PAS")).toBeVisible();
+  await expect(page.getByText("Couldn't load your account.")).toHaveCount(0);
+});
+
 test("Account tab when signed out (in-host) prompts sign-in", async ({ page }) => {
   await boot(page, {
     ordering: 0,

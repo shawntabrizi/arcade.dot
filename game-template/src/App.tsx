@@ -289,11 +289,15 @@ export function App() {
     }
   }, [scoreboard]);
 
-  // Load (and refresh) account details when the tab is open and signed in. Also
-  // re-runs after a score submit (refreshKey) so the balance/mapping stay live.
+  // Load (and refresh) account details whenever signed in. We do NOT gate on
+  // tab === "account": the Account panel is a tab on mobile but is ALWAYS visible
+  // on desktop (no tab bar), where `tab` stays "play" — so a tab gate would never
+  // load it on desktop and the panel showed "Couldn't load your account". Loading
+  // on sign-in covers both viewports; refreshKey re-runs it after a score submit
+  // so the balance/mapping stay live.
   useEffect(() => {
-    if (tab === "account" && signedIn) void loadAccount();
-  }, [tab, signedIn, refreshKey, loadAccount]);
+    if (signedIn) void loadAccount();
+  }, [signedIn, refreshKey, loadAccount]);
 
   // Map the product account on its own (pallet_revive), then refresh the tab.
   const mapNow = useCallback(async () => {
