@@ -13,6 +13,11 @@
   user-select: none;
   -webkit-user-select: none;
   touch-action: manipulation;
+  position: relative;
+  /* Size children against THIS surface, not the viewport — so the board +
+     keyboard always fit the shell's 2:3 frame on desktop (fixed 360×540) and
+     mobile alike. (vw units overflowed the desktop surface → overlap.) */
+  container-type: size;
 }
 
 .wordle-title {
@@ -52,12 +57,12 @@
 }
 
 .wordle-tile {
-  width: clamp(34px, 13vw, 56px);
-  height: clamp(34px, 13vw, 56px);
+  width: min(14cqw, 8.5cqh);
+  height: min(14cqw, 8.5cqh);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(18px, 6vw, 28px);
+  font-size: min(7cqw, 4.2cqh);
   font-weight: 800;
   text-transform: uppercase;
   border: 2px solid #3a3c42;
@@ -104,13 +109,13 @@
 .wordle-key {
   flex: 1 1 auto;
   min-width: 0;
-  max-width: 40px;
-  height: clamp(40px, 11vw, 52px);
+  max-width: 11cqw;
+  height: min(13cqw, 7.5cqh);
   border: none;
   border-radius: 4px;
   background: #818384;
   color: #fff;
-  font-size: clamp(11px, 3.5vw, 15px);
+  font-size: min(4cqw, 2.6cqh);
   font-weight: 700;
   text-transform: uppercase;
   cursor: pointer;
@@ -118,9 +123,9 @@
 }
 
 .wordle-key.wide {
-  max-width: 64px;
+  max-width: 18cqw;
   flex: 1.5 1 auto;
-  font-size: clamp(9px, 3vw, 12px);
+  font-size: min(3cqw, 2cqh);
 }
 
 .wordle-key.correct {
@@ -150,10 +155,6 @@
   padding: 24px;
   text-align: center;
   background: rgba(15, 17, 23, 0.92);
-}
-
-.wordle-root {
-  position: relative;
 }
 
 .wordle-overlay-title {

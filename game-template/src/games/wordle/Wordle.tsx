@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GameComponentProps } from "../types";
+import { VALID_WORDS } from "./wordlist";
 import "./wordle.css";
 
 // Wordle — guess a hidden 5-letter word in up to 6 tries, with per-letter color
@@ -15,9 +16,10 @@ import "./wordle.css";
 const WORD_LENGTH = 5;
 const MAX_GUESSES = 6;
 
-// Curated list of ~200 common 5-letter words. The answer is picked at random
-// from this list; any word in this list is also accepted as a valid guess (no
-// network/asset dependency — everything is inline).
+// Curated list of common 5-letter words the ANSWER is picked from, so every
+// answer is a familiar word. Guesses are validated against the much larger
+// bundled dictionary (wordlist.ts, ~8.5k words) UNION these answers — real words
+// like "hello" pass; nonsense is rejected. Everything is inline (no network dep).
 const WORDS: string[] = [
   "about", "above", "abuse", "actor", "acute", "admit", "adopt", "adult", "after", "again",
   "agent", "agree", "ahead", "alarm", "album", "alert", "alike", "alive", "allow", "alone",
@@ -98,7 +100,9 @@ function scoreGuess(guess: string, answer: string): LetterState[] {
   return result;
 }
 
-const VALID = new Set(WORDS);
+// Accepted guesses: the bundled dictionary plus every answer word (so an answer
+// is always a legal guess even if it's not in the dictionary list).
+const VALID = new Set([...VALID_WORDS, ...WORDS]);
 
 function pickAnswer(): string {
   return WORDS[Math.floor(Math.random() * WORDS.length)];

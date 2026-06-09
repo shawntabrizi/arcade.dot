@@ -1,6 +1,9 @@
 import type { ScoreboardAPI, ScoreEntry } from "./api";
 import { gcsQuery, isGcsDeployed, READ_ORIGIN } from "./gcs";
 
+// uint128 max — the lower-is-better "no record" sentinel returned by getBest.
+const MAX_U128 = 2n ** 128n - 1n;
+
 interface RawEntry {
   player: `0x${string}`;
   score: bigint;
@@ -33,8 +36,12 @@ export const contractScoreboard: ScoreboardAPI = {
     if (!isGcsDeployed()) return null;
     const best = await gcsQuery<bigint>("getBest", { player }, READ_ORIGIN);
     if (best === null) return null;
-    const v = Number(best);
-    return v === 0 ? null : v;
+    // "No record" sentinels: 0 for higher-is-better, uint128::MAX for
+    // lower-is-better (the contract seeds the best to MAX so any real score
+    // beats it). Either means the player has no best yet — return null, NOT
+    // the raw sentinel (which rendered as "3.4e38 guesses").
+    if (best === 0n || best === MAX_U128) return null;
+    return Number(best);
   },
 };
 
