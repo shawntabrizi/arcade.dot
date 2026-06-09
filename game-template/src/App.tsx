@@ -657,7 +657,7 @@ export function App() {
                     ID" the contract sees you by. */}
                 <div className="flex flex-col gap-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-tertiary m-0">
-                    Its addresses
+                    Product Account Addresses
                   </p>
                   <AddressRow
                     label="Your account (SS58)"
@@ -685,7 +685,7 @@ export function App() {
                 {/* Its balance & status */}
                 <div className="flex flex-col gap-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-tertiary m-0">
-                    Its balance &amp; status
+                    Product Account Balance &amp; Status
                   </p>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-secondary">Balance</span>
