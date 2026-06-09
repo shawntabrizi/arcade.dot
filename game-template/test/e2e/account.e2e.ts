@@ -77,13 +77,11 @@ test("Account tab: an unmapped account offers Map, and mapping flips the status"
   await expect(page.getByText("ready to save scores")).toBeVisible();
 });
 
-test("desktop: the Account panel loads WITHOUT a tab click (no tab bar on desktop)", async ({
-  page,
-}) => {
-  // On desktop there is no tab bar — all panels show at once and `tab` stays
-  // "play". Regression guard: account details must still load (they were gated
-  // on tab === "account", which never becomes true on desktop → "Couldn't load
-  // your account"). Boot at a desktop width and do NOT click any tab.
+test("desktop: right column tabs between Scoreboard (default) and Account", async ({ page }) => {
+  // On desktop the game is always on the left and the right column is a tabbed
+  // card: Scoreboard (default) / Account. Account no longer stacks below the
+  // boards (which pushed it off-screen). Account data still loads on sign-in, so
+  // switching to the Account tab shows it immediately — never "Couldn't load".
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.addInitScript((cfg) => {
     window.localStorage.clear();
@@ -102,11 +100,23 @@ test("desktop: the Account panel loads WITHOUT a tab click (no tab bar on deskto
   await page.goto("/");
   await expect(page.locator("canvas.snake-canvas")).toBeVisible();
 
-  // No tab interaction — the account card content is present because it loads on
-  // sign-in, and the desktop layout shows the panel unconditionally.
+  // Default: Scoreboard shown, Account hidden (not stacked below).
+  await expect(page.locator(".panel-boards")).toBeVisible();
+  await expect(page.locator(".panel-account")).toBeHidden();
+
+  // Switch to the Account tab (the desktop right-column tab strip).
+  await page.getByRole("tab", { name: "Account" }).click();
+  await expect(page.locator(".panel-account")).toBeVisible();
+  await expect(page.locator(".panel-boards")).toBeHidden();
+  // Already loaded on sign-in — content shows, never the error fallback.
   await expect(page.getByText("product / arcade-snake.dot / 0")).toBeVisible();
   await expect(page.getByText("1.5 PAS")).toBeVisible();
   await expect(page.getByText("Couldn't load your account.")).toHaveCount(0);
+
+  // And back to the Scoreboard.
+  await page.getByRole("tab", { name: "Scoreboard" }).click();
+  await expect(page.locator(".panel-boards")).toBeVisible();
+  await expect(page.locator(".panel-account")).toBeHidden();
 });
 
 test("Account tab when signed out (in-host) prompts sign-in", async ({ page }) => {

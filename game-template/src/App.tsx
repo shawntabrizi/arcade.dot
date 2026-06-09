@@ -463,7 +463,11 @@ export function App() {
         <ChevronLeft className="w-4 h-4" />
         Arcade
       </a>
-      <div className="panel-area">
+      {/* data-righttab drives the DESKTOP right column: the game is always shown
+          on the left and the right column is a tabbed card (Scoreboard default /
+          Account) — so Account no longer stacks below the boards and off-screen.
+          On mobile this attribute is unused; the bottom tab bar toggles panels. */}
+      <div className="panel-area" data-righttab={tab === "account" ? "account" : "boards"}>
         {/* ── Play panel ──────────────────────────────────────────────── */}
         <section
           className="panel panel-play"
@@ -535,6 +539,37 @@ export function App() {
             )}
           </div>
         </section>
+
+        {/* Right column wrapper. On mobile it's `display: contents` (transparent —
+            the boards/account stay full-screen panels toggled by the bottom bar).
+            On desktop it's a flex column so the tab strip + the active panel stack
+            top-aligned in one grid cell (no row-spanning gap). */}
+        <div className="right-col">
+        {/* ── Desktop-only right-column tab strip (Scoreboard / Account). Hidden
+            on mobile (the bottom tab bar handles switching there). Reuses `tab`:
+            "Account" → account; anything else → the boards (default). ── */}
+        <div className="desktop-tabs" role="tablist" aria-label="Right panel">
+          <button
+            type="button"
+            className="desktop-tab"
+            role="tab"
+            aria-selected={tab !== "account"}
+            onClick={() => setTab("scores")}
+          >
+            <Trophy size={16} aria-hidden />
+            Scoreboard
+          </button>
+          <button
+            type="button"
+            className="desktop-tab"
+            role="tab"
+            aria-selected={tab === "account"}
+            onClick={() => setTab("account")}
+          >
+            <User size={16} aria-hidden />
+            Account
+          </button>
+        </div>
 
         {/* ── Boards panel (Scores + Recent). One Leaderboard instance; the
             active mobile tab toggles which card shows, desktop shows both. ── */}
@@ -683,6 +718,7 @@ export function App() {
             )}
           </div>
         </section>
+        </div>
       </div>
 
       {/* ── Bottom tab bar (mobile only; hidden on desktop via CSS) ──────── */}
