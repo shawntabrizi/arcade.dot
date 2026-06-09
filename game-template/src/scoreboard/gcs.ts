@@ -11,10 +11,14 @@ import { createPapiProvider } from "@novasamatech/host-api-wrapper";
 import { createInkSdk } from "@polkadot-api/sdk-ink";
 import cdmJson from "../../cdm.json";
 
-// Paseo Next v2 — Asset Hub genesis. The host routes chain access by genesis
-// hash; this must match the chain `assetHubEndpoint()` points at.
+// Asset Hub genesis for "Paseo Asset Hub Next" (the chain
+// `assetHubEndpoint()` points at). The host routes chain access by genesis
+// hash: createPapiProvider asks `host_feature_supported(Chain, <genesis>)`, and
+// ONLY tunnels through the host when it matches. A WRONG genesis makes that
+// check fail, so it silently opens a direct RPC WebSocket — which makes the host
+// prompt "Allow access to web domains?". Verified live via getChainSpecData().
 const ASSET_HUB_GENESIS =
-  "0x173cea9df45656cf612c8b8ece56e04e9a693c69cfaac47d3628dae735067af8" as const;
+  "0xbf0488dbe9daa1de1c08c5f743e26fdc2a4ecd74cf87dd1b4b1eeb99ae4ef19f" as const;
 
 // The one game contract the template talks to: the GCS reference (SPEC §4.6).
 // Its ABI is identical for every conforming game (SPEC §7.4); the deployed
@@ -67,16 +71,18 @@ export function assetHubEndpoint(): string {
   return ep;
 }
 
-// Direct WS only when there is no host to tunnel through: Node (smoke/boot
-// harnesses, `typeof window === "undefined"`) and local dev (`localhost`).
-// createPapiProvider traps without a host, so we must not use it there.
+// In-host: route ALL chain RPC through the host via createPapiProvider with NO
+// WS fallback. The fallback arg is "for testing purposes only" (host-api-wrapper
+// papiProvider.js) and is exactly what opens a direct WebSocket to the RPC when
+// the host route isn't taken — the thing that triggers the web-domain prompt.
+// With the correct genesis the host serves the chain and no socket is opened.
+// Direct WS only where there is genuinely no host to tunnel through: Node
+// (smoke/boot harnesses, `typeof window === "undefined"`) and local dev.
 function chainProvider(endpoint: string) {
   const directWs =
     typeof window === "undefined" ||
     /^localhost(:\d+)?$/.test(window.location.host);
-  return directWs
-    ? getWsProvider(endpoint)
-    : createPapiProvider(ASSET_HUB_GENESIS, getWsProvider(endpoint));
+  return directWs ? getWsProvider(endpoint) : createPapiProvider(ASSET_HUB_GENESIS);
 }
 
 let client: PolkadotClient | null = null;

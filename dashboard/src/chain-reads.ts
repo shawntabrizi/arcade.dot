@@ -21,9 +21,12 @@ import { createPapiProvider } from "@novasamatech/host-api-wrapper";
 import { createInkSdk } from "@polkadot-api/sdk-ink";
 import cdmJson from "../cdm.json";
 
-// Paseo Next v2 — Asset Hub genesis (host routes chain access by genesis hash).
+// Asset Hub genesis for "Paseo Asset Hub Next". The host routes chain access by
+// genesis hash; a WRONG one makes createPapiProvider's host-support check fail
+// and silently fall back to a direct RPC WebSocket → the host's "Allow access to
+// web domains?" prompt. Verified live via getChainSpecData().
 const ASSET_HUB_GENESIS =
-  "0x173cea9df45656cf612c8b8ece56e04e9a693c69cfaac47d3628dae735067af8" as const;
+  "0xbf0488dbe9daa1de1c08c5f743e26fdc2a4ecd74cf87dd1b4b1eeb99ae4ef19f" as const;
 import dotnsReverseResolverAbi from "./abis/DotnsReverseResolver.json";
 import type { ArcadeReads } from "./arcade-reads";
 import {
@@ -102,16 +105,17 @@ function gcsAbi(): unknown[] {
   return e.abi;
 }
 
-// Direct WS only when there is no host to tunnel through: Node (the live smoke
+// In-host: route ALL chain RPC through the host via createPapiProvider with NO
+// WS fallback. The fallback arg is "for testing purposes only" and is exactly
+// what opens a direct RPC WebSocket (→ the web-domain prompt) when the host
+// route isn't taken. With the correct genesis the host serves the chain and no
+// socket opens. Direct WS only where there is no host: Node (the live smoke
 // test, `typeof window === "undefined"`) and local dev (`localhost`).
-// createPapiProvider traps without a host, so we must not use it there.
 function chainProvider(endpoint: string) {
   const directWs =
     typeof window === "undefined" ||
     /^localhost(:\d+)?$/.test(window.location.host);
-  return directWs
-    ? getWsProvider(endpoint)
-    : createPapiProvider(ASSET_HUB_GENESIS, getWsProvider(endpoint));
+  return directWs ? getWsProvider(endpoint) : createPapiProvider(ASSET_HUB_GENESIS);
 }
 
 let _client: PolkadotClient | null = null;

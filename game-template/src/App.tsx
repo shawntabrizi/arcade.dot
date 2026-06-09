@@ -67,11 +67,11 @@ const GAME_KEY = getGcsAddress() ?? "local";
 type Phase = "idle" | "submitting" | "submitted" | "error";
 type Tab = "play" | "scores" | "recent" | "account";
 
-// Open the host faucet prefilled with an address. Inside the host this MUST go
-// through navigateTo (the desktop webview denies window.open / target=_blank);
-// standalone web falls back to a new tab. faucet.dot.li is itself a host app.
-function openFaucet(ss58: string): void {
-  const url = faucetUrl(ss58);
+// Open a .dot host app URL. Inside the host this MUST go through navigateTo (the
+// desktop webview denies window.open / target=_blank, so a plain anchor does
+// nothing); standalone web falls back to a new tab. Used for the Arcade back
+// link and the faucet (faucet.dot.li is itself a host app).
+function openHostUrl(url: string): void {
   if (isInsideContainerSync()) {
     void getTruApi().then((t) => {
       t?.navigateTo({ tag: "v1", value: url });
@@ -79,6 +79,10 @@ function openFaucet(ss58: string): void {
   } else {
     window.open(url, "_blank", "noopener");
   }
+}
+
+function openFaucet(ss58: string): void {
+  openHostUrl(faucetUrl(ss58));
 }
 
 // Truncate an SS58 for display (shortAddress is H160-shaped; SS58 isn't 0x).
@@ -412,12 +416,22 @@ export function App() {
 
   return (
     <div className="app-shell text-primary">
-      {/* Back to the arcade — imposed by the shell on every game, every viewport. */}
+      {/* Back to the arcade — imposed by the shell on every game, every viewport.
+          Inside the host, target=_blank/window.open are sandbox-blocked, so the
+          plain anchor does nothing; intercept and route through navigateTo (the
+          same fix as the dashboard Play button). Outside a host the anchor's
+          default new-tab behaviour stands. */}
       <a
         className="arcade-back inline-flex items-center gap-1 rounded-full bg-surface-container text-secondary hover:text-primary px-3 py-1.5 text-[13px] font-medium no-underline transition-colors"
         href={ARCADE_URL}
         target="_blank"
         rel="noopener"
+        onClick={(e) => {
+          if (isInsideContainerSync()) {
+            e.preventDefault();
+            openHostUrl(ARCADE_URL);
+          }
+        }}
       >
         <ChevronLeft className="w-4 h-4" />
         Arcade

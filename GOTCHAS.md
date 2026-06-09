@@ -173,26 +173,54 @@ prompt that makes an app feel untrustworthy.
 
 From the sandbox's perspective, your direct socket is an **external-domain
 request** like any other — it can't tell "the chain" apart from "some random
-server." But the host *already has* a chain connection, so the right move is to
-**tunnel JSON-RPC through the host** instead of opening your own pipe:
-`createPapiProvider(GENESIS, getWsProvider(endpoint))` (the pattern the
-Rock-Paper-Scissors reference app uses). The host routes by genesis hash, so no
-external request, no prompt — with the direct WS kept only as a fallback.
+server." The host *already has* a chain connection, so the right move is to
+**tunnel JSON-RPC through the host** with `createPapiProvider(GENESIS)`.
 
-The subtlety: `createPapiProvider` needs a host to tunnel through. In **Node**
-(our smoke/boot tests) and **localhost** dev there is no host, and it traps, so
-we fall back to direct WS *only* in those headless/dev cases:
+**This bit us twice, and the second bug is the subtle, important one.** Our first
+fix passed a WS fallback as the second arg —
+`createPapiProvider(GENESIS, getWsProvider(endpoint))` — copying the
+Rock-Paper-Scissors app. The prompt *kept appearing*. Reading the
+host-api-wrapper source explained why:
+
+```ts
+// createPapiProvider(genesisHash, __fallback)  — __fallback is documented
+// "for testing purposes only, should not be used in real production code"
+checkIfReady().then((ready) => {
+  if (ready)            onResult(hostRoute);      // tunnel through host — no socket
+  else if (__fallback)  onResult(__fallback);     // OPENS THE WS → the prompt
+  else                  onResult(errorProvider);  // no socket
+});
+// ready = host is up AND host_feature_supported("Chain", genesisHash) is true
+```
+
+So the WS only opens when `checkIfReady()` is **false** — and ours was false
+because **the genesis hash was wrong**. We'd hardcoded
+`0x173cea9d…067af8` (from RPS), but the live chain's genesis (via
+`getChainSpecData()`) is `0xbf0488db…ef19f`. With a genesis the host doesn't
+recognize, `host_feature_supported` returns false, the host route is skipped, and
+the "testing only" fallback silently dials the RPC — producing the prompt even
+though we *thought* we were routing through the host.
+
+The real fix is two parts:
+1. **Use the correct genesis** — verify it live with `getChainSpecData()`, don't
+   copy a constant from another app (chains get re-genesised; "next" endpoints
+   especially).
+2. **Don't pass the WS `__fallback` in production.** Inside a host call
+   `createPapiProvider(GENESIS)` alone (this is what the canonical
+   `getHostProvider` does). Use a direct WS *only* where there is genuinely no
+   host — Node (smoke/boot tests) and localhost:
 
 ```ts
 const directWs =
   typeof window === "undefined" || /^localhost(:\d+)?$/.test(window.location.host);
-const provider = directWs
-  ? getWsProvider(endpoint)
-  : createPapiProvider(GENESIS, getWsProvider(endpoint));
+const provider = directWs ? getWsProvider(endpoint) : createPapiProvider(GENESIS);
 ```
 
-**Takeaway:** don't open your own socket to the chain from inside the host. Route
-through the host provider; reserve direct WS for headless and local dev.
+**Takeaway:** don't open your own socket to the chain from inside the host, and
+don't pass the test-only WS fallback — it converts a wrong-genesis (or
+host-not-ready) into a silent direct dial and a scary prompt. Verify the genesis
+against the live chain; a copied constant that's subtly wrong fails *open* (it
+still works, via the fallback) which is why it survived testing.
 
 ### We loaded our font from Google Fonts — the same domain prompt, for a font.
 
@@ -355,7 +383,9 @@ Most of these are just "don't do the normal web/dapp thing here":
 - **Map + call in one `batch_all`**; dry-run as the mapped origin until the
   player exists.
 - **Don't open your own socket to the chain** — tunnel via
-  `createPapiProvider(genesis, wsFallback)`; direct WS only headless/localhost.
+  `createPapiProvider(genesis)` (NO ws fallback — it's test-only and dials the
+  socket); direct WS only headless/localhost. Verify the genesis live with
+  `getChainSpecData()`; a wrong genesis fails open via the fallback → prompt.
 - **Zero external requests** — bundle fonts/assets/libs (latin subset only); no
   `<link>`/`<script>`/`url(https://…)`.
 - **Cross-app links** go through `navigateTo({tag:"v1", value})`, with a web
