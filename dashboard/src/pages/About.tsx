@@ -51,11 +51,12 @@ export function About() {
             &ldquo;Build Tetris as a new game in this template and deploy it to the arcade.&rdquo;
           </blockquote>
           <p>
-            The template already carries the boring-but-critical 80%: wallet/identity, signing,
-            score-saving, the leaderboard, the mobile layout, the &ldquo;back to arcade&rdquo;
-            button. The builder writes <em>only the gameplay</em> — one React component that calls{" "}
-            <code>onGameEnd(score)</code> when a round ends. Chain, styling, and plumbing are
-            imposed, not optional. Swap the active game in one line and ship.
+            The template already handles the critical 80% — and makes it simple and fast:
+            wallet/identity, signing, score-saving, the leaderboard, the mobile layout, the
+            &ldquo;back to arcade&rdquo; button. The builder writes <em>only the gameplay</em> — one
+            React component that calls <code>onGameEnd(score)</code> when a round ends. Chain,
+            styling, and plumbing come built-in, so it just works. Swap the active game in one line
+            and ship.
           </p>
           <p className="about__src">
             Peek inside: <Src path="game-template/CLAUDE.md">the agent runbook</Src> ·{" "}
@@ -70,8 +71,8 @@ export function About() {
           </h2>
           <p>
             Instead of one giant contract trying to do everything, the design splits into small,
-            boring, swappable parts — like a real arcade cabinet: a coin mech here, a score display
-            there.
+            simple, swappable parts — each does one job well — like a real arcade cabinet: a coin
+            mech here, a score display there.
           </p>
           <ul className="about__list">
             <li>
@@ -141,20 +142,27 @@ export function About() {
             <span className="about__emoji">🏆</span> Why build it this way
           </h2>
           <p>
-            Three reasons, in plain terms:
+            The whole thing optimizes for five words: <strong>simple, easy, fast, fun,
+            effective</strong>. In practice that means:
           </p>
           <ul className="about__list">
             <li>
-              <strong>Permissionless.</strong> No gatekeeper approves your game. Deploy a conforming
-              contract, register, and you&rsquo;re on the floor.
+              <strong>Simple &amp; easy.</strong> One prompt, one gameplay component, one line to
+              swap the active game. The template handles the rest.
             </li>
             <li>
-              <strong>Honest by construction.</strong> The dashboard can only show what the contracts
-              actually hold. Scores can&rsquo;t be faked in a spreadsheet.
+              <strong>Fast.</strong> A working, styled, on-chain game is a single good sentence away
+              — minutes, not weeks of plumbing.
             </li>
             <li>
-              <strong>Low effort to join.</strong> The one-prompt template means a working,
-              styled, on-chain game is a single good sentence away.
+              <strong>Fun.</strong> Builders ship actual games; players get real high scores to
+              chase. The chain is the scoreboard, not the homework.
+            </li>
+            <li>
+              <strong>Effective &amp; permissionless.</strong> No gatekeeper approves your game, and
+              the dashboard can only show what the contracts actually hold — so scores can&rsquo;t be
+              faked in a spreadsheet. Deploy a conforming contract, register, and you&rsquo;re on the
+              floor.
             </li>
           </ul>
           <p className="about__src">

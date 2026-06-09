@@ -194,10 +194,11 @@ test.describe("About page (§1/§3–§7 explainer)", () => {
     await page.locator(".app__navlink", { hasText: "About" }).click();
     expect(page.url()).toContain("#/about");
     await expect(page.locator(".about__title")).toHaveText("Insert coin.");
-    // Key concepts are present.
-    await expect(page.getByText("One prompt, one game")).toBeVisible();
-    await expect(page.getByText("How the cabinet is wired")).toBeVisible();
-    await expect(page.getByText("How games phone home")).toBeVisible();
+    // Key concepts are present as section headings (scope to h2 so prose that
+    // echoes a heading phrase doesn't trip strict-mode multi-match).
+    await expect(page.locator(".about__h2", { hasText: "One prompt, one game" })).toBeVisible();
+    await expect(page.locator(".about__h2", { hasText: "How the cabinet is wired" })).toBeVisible();
+    await expect(page.locator(".about__h2", { hasText: "How games phone home" })).toBeVisible();
     // Source links point at the repo.
     const spec = page.locator("a.link", { hasText: "the full spec" });
     await expect(spec).toHaveAttribute(
