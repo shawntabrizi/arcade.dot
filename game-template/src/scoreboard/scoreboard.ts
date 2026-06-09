@@ -132,6 +132,14 @@ export class Scoreboard {
     return readGuestBest(this.store, this.gameKey);
   }
 
+  // Public read of the active identity's already-recorded best (on-chain for a
+  // signed-in player, persisted locally for a guest). The UI seeds the displayed
+  // "Best" from this so it reflects the player's true record — including scores
+  // from earlier sessions in the contract history — not just this session.
+  async currentBest(): Promise<number | null> {
+    return this.knownBest();
+  }
+
   // Connect a host wallet account (SPEC §8.1). Returns the player's H160.
   async signIn(): Promise<`0x${string}`> {
     return this.gateway.connect();

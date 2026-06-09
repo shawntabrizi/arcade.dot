@@ -160,6 +160,24 @@ test("3b. signed-in player → a non-improving score offers no submit (best alre
   expect(await submits(page)).toEqual([]);
 });
 
+test("3c. Best is seeded from the contract record, above this session's scores", async ({
+  page,
+}) => {
+  // The player already has an on-chain best of 50. "Best" must reflect that
+  // record (not just this session), and show even before playing.
+  await boot(page, {
+    ordering: 0,
+    player: SIGNED_IN_PLAYER,
+    bests: { [SIGNED_IN_PLAYER.toLowerCase()]: 50 },
+  });
+  // Shows the on-chain best before any play this session.
+  await expect(page.getByText("Best: 50", { exact: false })).toBeVisible();
+  // A lower session score updates Last but never lowers the displayed Best.
+  await forceGameOver(page, 30);
+  await expect(page.getByText("Last: 30", { exact: false })).toBeVisible();
+  await expect(page.getByText("Best: 50", { exact: false })).toBeVisible();
+});
+
 test("4. requiresAccount=true gates at launch; play is blocked until sign-in", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.clear();

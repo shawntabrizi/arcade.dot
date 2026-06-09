@@ -299,6 +299,29 @@ export function App() {
     if (signedIn) void loadAccount();
   }, [signedIn, refreshKey, loadAccount]);
 
+  // Seed the displayed "Best" from the player's ALREADY-RECORDED best (on-chain
+  // for a signed-in player, persisted locally for a guest), so it reflects their
+  // true record — including higher scores from earlier sessions in the contract
+  // history — not just this session's play. Combined with session scores via
+  // pickBetter; re-runs on sign-in and after a submit (refreshKey).
+  useEffect(() => {
+    if (!CONTRACT_DEPLOYED) return;
+    let cancelled = false;
+    void scoreboard
+      .currentBest()
+      .then((b) => {
+        if (!cancelled && b !== null) {
+          setBestScore((prev) => pickBetter(prev, b, SCORE_ORDERING));
+        }
+      })
+      .catch(() => {
+        /* best is a display convenience — never block the game on it */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scoreboard, signedIn, refreshKey]);
+
   // Map the product account on its own (pallet_revive), then refresh the tab.
   const mapNow = useCallback(async () => {
     setMapping(true);
@@ -489,14 +512,18 @@ export function App() {
                 <div className="game-surface">
                   <ActiveGame onGameEnd={onGameEnd} />
                 </div>
-                {lastScore !== null && (
+                {(lastScore !== null || bestScore !== null) && (
                   <div className="flex flex-col items-center gap-3 w-full">
                     <p className="text-sm text-secondary m-0">
-                      Last: <strong className="text-primary">{fmtScore(lastScore)}</strong>
+                      {lastScore !== null && (
+                        <>
+                          Last: <strong className="text-primary">{fmtScore(lastScore)}</strong>
+                        </>
+                      )}
+                      {lastScore !== null && bestScore !== null && " · "}
                       {bestScore !== null && (
                         <>
-                          {" · "}Best:{" "}
-                          <strong className="text-primary">{fmtScore(bestScore)}</strong>
+                          Best: <strong className="text-primary">{fmtScore(bestScore)}</strong>
                         </>
                       )}
                       {!CONTRACT_DEPLOYED && " · contract not deployed"}
