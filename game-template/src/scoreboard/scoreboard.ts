@@ -34,6 +34,18 @@ export function isWorthKeeping(
   return ordering === 1 ? score < knownBest : score > knownBest;
 }
 
+// The better of two scores under the ordering (SPEC §4.2); null means "none yet".
+// Used to keep a running session best (App display + the monotonic held best).
+export function pickBetter(
+  a: number | null,
+  b: number | null,
+  ordering: ScoreOrdering,
+): number | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return isWorthKeeping(b, a, ordering) ? b : a;
+}
+
 function guestKey(gameKey: string): string {
   return `${GUEST_KEY_PREFIX}${gameKey}`;
 }
@@ -134,11 +146,20 @@ export class Scoreboard {
   // never ask the player to sign for a score that wouldn't change the board.
   async onGameEnd(score: number): Promise<GameOverOutcome> {
     const ordering = await this.gateway.scoreOrdering();
-    const best = await this.knownBest();
-    if (!isWorthKeeping(score, best, ordering)) {
+    const saved = await this.knownBest();
+    // The best we'd actually submit: the better of what's already saved (the
+    // signed-in player's on-chain best, or the guest's persisted best) and any
+    // best we're already holding from earlier rounds this session. Comparing the
+    // new score against THIS — not just `saved` — keeps `held` monotonic: a
+    // player who replays and scores worse-but-still-better-than-saved can never
+    // lower the held best they'd submit (the score they came back to submit).
+    const effectiveBest =
+      this.held === null ? saved : pickBetter(saved, this.held, ordering);
+    if (!isWorthKeeping(score, effectiveBest, ordering)) {
       return { kind: "ignored", score };
     }
 
+    // The score beats the effective best → it is the new session best to submit.
     this.held = score;
     if (this.isSignedIn()) {
       // Ask before signing: no phone approval until the player taps Save.

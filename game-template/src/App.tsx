@@ -4,7 +4,7 @@ import { ActiveGame, ACTIVE_GAME_TITLE } from "./games/active";
 import type { ScoreEntry, ScoreOrdering } from "./scoreboard/api";
 import { Leaderboard, shortAddress } from "./scoreboard/Leaderboard";
 import { contractScoreboard, isContractDeployed } from "./scoreboard/reads";
-import { Scoreboard, type GameOverOutcome } from "./scoreboard/scoreboard";
+import { Scoreboard, pickBetter } from "./scoreboard/scoreboard";
 import { createSdkGateway } from "./scoreboard/sdk-gateway";
 import { createFakeGateway } from "./scoreboard/fake-gateway";
 import { getGcsAddress } from "./scoreboard/gcs";
@@ -44,6 +44,11 @@ const SCORE_ORDERING: ScoreOrdering = FAKE_GATEWAY
   ? (globalThis.window?.__ARCADE_FAKE__?.config.ordering ?? 0)
   : ((arcadeConfig.contract?.scoreOrdering as ScoreOrdering) ?? 0);
 
+// Optional unit suffix for displayed scores (e.g. "guesses" for Wordle). Purely
+// cosmetic for the Last/Best line; the on-chain value is always the raw number.
+const SCORE_UNIT = FAKE_GATEWAY ? "" : (arcadeConfig.contract?.scoreUnit ?? "");
+const fmtScore = (n: number) => (SCORE_UNIT ? `${n} ${SCORE_UNIT}` : `${n}`);
+
 const SCOREBOARD = contractScoreboard;
 // Under the test flag the (faked) contract is always "deployed" so the
 // save-score / submit flow is active without a chain.
@@ -52,13 +57,21 @@ const CONTRACT_DEPLOYED = FAKE_GATEWAY || isContractDeployed();
 // per-game key on this origin.
 const GAME_KEY = getGcsAddress() ?? "local";
 
-type Phase = "playing" | "confirm" | "prompt" | "submitting" | "submitted" | "error";
+// The save lifecycle. The Last/Best line + submit affordance are driven by
+// `submittable` (is there a session best worth saving?), so the game-over UI
+// persists across replays instead of vanishing after a non-best round; `phase`
+// only tracks the actual save round-trip.
+type Phase = "idle" | "submitting" | "submitted" | "error";
 type Tab = "play" | "scores" | "recent";
 
 export function App() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastScore, setLastScore] = useState<number | null>(null);
-  const [phase, setPhase] = useState<Phase>("playing");
+  // The best score this session (for display), and whether that best is worth
+  // submitting (better than what's already saved for this identity).
+  const [bestScore, setBestScore] = useState<number | null>(null);
+  const [submittable, setSubmittable] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [player, setPlayer] = useState<`0x${string}` | null>(null);
   // Drives which 100dvh panel shows on mobile; desktop ignores it (CSS shows
@@ -151,57 +164,47 @@ export function App() {
     [scoreboard],
   );
 
-  // The game calls this exactly once per match (SPEC §10.4 — Snake's own
-  // `ended` guard enforces it), so a single onGameEnd drives at most one submit.
+  // The game calls this once per match (SPEC §10.4). It updates the local Last
+  // and Best scores and asks the scoreboard whether the running best is worth
+  // submitting — it NEVER signs. The player submits their best when they choose,
+  // after playing as many rounds as they like (the held best stays the best of
+  // the session; see scoreboard.onGameEnd).
   const onGameEnd = useCallback(
     async (score: number) => {
       setLastScore(score);
+      setBestScore((prev) => pickBetter(prev, score, SCORE_ORDERING));
       setError(null);
-      if (!CONTRACT_DEPLOYED) {
-        setPhase("playing");
-        return;
-      }
+      if (phase === "error" || phase === "submitted") setPhase("idle");
+      if (!CONTRACT_DEPLOYED) return;
       try {
-        const outcome: GameOverOutcome = await scoreboard.onGameEnd(score);
-        switch (outcome.kind) {
-          case "confirm": // signed-in, new best → ask before signing
-            setPhase("confirm");
-            break;
-          case "prompt": // guest, worth keeping → "sign in to save your score"
-            setPhase("prompt");
-            break;
-          case "ignored":
-            setPhase("playing");
-            break;
-        }
+        await scoreboard.onGameEnd(score);
+        setSubmittable(scoreboard.heldScore() !== null);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
         setPhase("error");
       }
     },
-    [showOptimistic, scoreboard],
+    [scoreboard, phase],
   );
 
   // SPEC §8.3: the conversion moment — connect host wallet → ensureAccountMapped
-  // → submitScore the held score. One flow, inherited by every template game.
+  // → submitScore the held BEST score. One flow, inherited by every template
+  // game. Triggered explicitly by the player tapping "Submit best score".
   const saveScore = useCallback(async () => {
+    const submitted = scoreboard.heldScore();
     setPhase("submitting");
     setError(null);
     try {
       await scoreboard.saveHeldScore();
-      if (lastScore !== null) showOptimistic(lastScore);
+      if (submitted !== null) showOptimistic(submitted);
+      setSubmittable(false);
       setPhase("submitted");
       setRefreshKey((k) => k + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setPhase("error");
     }
-  }, [scoreboard, lastScore, showOptimistic]);
-
-  // Dismiss the prompt / banner and return to play (Snake replays in place).
-  const onRestart = useCallback(() => {
-    setPhase("playing");
-  }, []);
+  }, [scoreboard, showOptimistic]);
 
   // The session status line (three honest SPEC §8.1/§8.3 states). Kept in one
   // place so it can sit in the Play panel header on every viewport.
@@ -211,7 +214,7 @@ export function App() {
       <code className="text-primary" title={session.account!.h160}>
         {shortAddress(session.account!.h160)}
       </code>{" "}
-      — you&rsquo;ll be asked before saving a new best.
+      — submit your best score whenever you&rsquo;re ready.
     </p>
   ) : session.inHost ? (
     <p className="text-sm text-secondary m-0" data-session="in-host-guest">
@@ -231,98 +234,74 @@ export function App() {
     </p>
   );
 
-  // Game-over sheet content (save / sign-in / submitted / error). Rendered as a
-  // bottom sheet over the game on mobile, an inline card on desktop.
-  const sheet = (() => {
-    if (phase === "confirm") {
-      return (
-        <div className="sheet">
-          <p className="text-base font-semibold text-primary m-0 mb-3">
-            New best! Save your score?
-          </p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={saveScore}
-              className="bg-action-primary text-primary-inverted font-medium text-sm px-4 py-2 rounded-small hover:bg-action-primary-hover transition-colors cursor-pointer"
-            >
-              Save score
-            </button>
-            <button
-              type="button"
-              onClick={onRestart}
-              className="bg-action-secondary text-primary font-medium text-sm px-4 py-2 rounded-small hover:bg-action-secondary-hover transition-colors cursor-pointer"
-            >
-              No thanks
-            </button>
-          </div>
-        </div>
-      );
-    }
-    if (phase === "prompt") {
-      return (
-        <div className="sheet">
-          <p className="text-base font-semibold text-primary m-0 mb-3">
-            Sign in to save your score
-          </p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={saveScore}
-              className="bg-action-primary text-primary-inverted font-medium text-sm px-4 py-2 rounded-small hover:bg-action-primary-hover transition-colors cursor-pointer"
-            >
-              Sign in &amp; save
-            </button>
-            <button
-              type="button"
-              onClick={onRestart}
-              className="bg-action-secondary text-primary font-medium text-sm px-4 py-2 rounded-small hover:bg-action-secondary-hover transition-colors cursor-pointer"
-            >
-              Keep playing as guest
-            </button>
-          </div>
-        </div>
-      );
+  // Persistent game-over affordance: track Last + Best across replays and let
+  // the player submit their BEST when they're ready (SPEC §8.3). Unlike a
+  // transient nudge, this stays available after a worse round, so "play a few
+  // times, then submit your best" works. Driven by `submittable` + the save
+  // `phase`, not by the most recent round's outcome.
+  const submitArea = (() => {
+    if (phase === "submitting") {
+      return <p className="text-sm text-secondary m-0">Saving your best…</p>;
     }
     if (phase === "submitted") {
       return (
-        <div className="sheet">
-          <p className="text-sm text-secondary m-0">
-            {player && (
-              <>
-                Saved as{" "}
-                <code className="text-primary" title={player}>
-                  {shortAddress(player)}
-                </code>
-                .{" "}
-              </>
-            )}
-            <button
-              type="button"
-              onClick={onRestart}
-              className="bg-action-secondary text-primary font-medium text-sm px-3 py-1.5 rounded-small hover:bg-action-secondary-hover transition-colors cursor-pointer"
-            >
-              Play again
-            </button>
-          </p>
-        </div>
+        <p className="text-sm text-success m-0">
+          Best saved
+          {player && (
+            <>
+              {" "}
+              as{" "}
+              <code className="text-primary" title={player}>
+                {shortAddress(player)}
+              </code>
+            </>
+          )}
+          . Keep playing to beat it.
+        </p>
       );
     }
     if (phase === "error" && error) {
       return (
-        <div className="sheet">
-          <p className="text-sm text-error m-0 mb-3 break-words">Couldn&rsquo;t save: {error}</p>
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-sm text-error m-0 break-words">Couldn&rsquo;t save: {error}</p>
           <button
             type="button"
-            onClick={onRestart}
+            onClick={saveScore}
             className="bg-action-secondary text-primary font-medium text-sm px-4 py-2 rounded-small hover:bg-action-secondary-hover transition-colors cursor-pointer"
           >
-            Dismiss
+            Try again
           </button>
         </div>
       );
     }
-    return null;
+    if (!submittable) return null;
+    if (signedIn) {
+      return (
+        <button
+          type="button"
+          onClick={saveScore}
+          className="bg-action-primary text-primary-inverted font-medium text-sm px-4 py-2 rounded-small hover:bg-action-primary-hover transition-colors cursor-pointer"
+        >
+          Submit best score
+        </button>
+      );
+    }
+    if (session.inHost) {
+      return (
+        <button
+          type="button"
+          onClick={saveScore}
+          className="bg-action-primary text-primary-inverted font-medium text-sm px-4 py-2 rounded-small hover:bg-action-primary-hover transition-colors cursor-pointer"
+        >
+          Sign in &amp; submit best
+        </button>
+      );
+    }
+    return (
+      <p className="text-sm text-secondary m-0">
+        Open this game in the Polkadot app to save your best.
+      </p>
+    );
   })();
 
   return (
@@ -387,14 +366,20 @@ export function App() {
                   <ActiveGame onGameEnd={onGameEnd} />
                 </div>
                 {lastScore !== null && (
-                  <p className="text-sm text-secondary m-0">
-                    Last score: <strong className="text-primary">{lastScore}</strong>
-                    {phase === "submitting" && " · saving…"}
-                    {phase === "submitted" && " · saved"}
-                    {!CONTRACT_DEPLOYED && " · contract not deployed"}
-                  </p>
+                  <div className="flex flex-col items-center gap-3 w-full">
+                    <p className="text-sm text-secondary m-0">
+                      Last: <strong className="text-primary">{fmtScore(lastScore)}</strong>
+                      {bestScore !== null && (
+                        <>
+                          {" · "}Best:{" "}
+                          <strong className="text-primary">{fmtScore(bestScore)}</strong>
+                        </>
+                      )}
+                      {!CONTRACT_DEPLOYED && " · contract not deployed"}
+                    </p>
+                    {CONTRACT_DEPLOYED && submitArea}
+                  </div>
                 )}
-                {sheet}
               </>
             )}
           </div>
