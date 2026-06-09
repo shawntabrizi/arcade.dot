@@ -187,3 +187,27 @@ test.describe("Detail — hero, Play button, name resolution, score formats (§7
     expect(page.url()).toContain(`#/game/${A1}`);
   });
 });
+
+test.describe("About page (§1/§3–§7 explainer)", () => {
+  test("the header About link routes to #/about and renders the explainer", async ({ page }) => {
+    await gotoHome(page);
+    await page.locator(".app__navlink", { hasText: "About" }).click();
+    expect(page.url()).toContain("#/about");
+    await expect(page.locator(".about__title")).toHaveText("Insert coin.");
+    // Key concepts are present.
+    await expect(page.getByText("One prompt, one game")).toBeVisible();
+    await expect(page.getByText("How the cabinet is wired")).toBeVisible();
+    await expect(page.getByText("How games phone home")).toBeVisible();
+    // Source links point at the repo.
+    const spec = page.locator("a.link", { hasText: "the full spec" });
+    await expect(spec).toHaveAttribute(
+      "href",
+      /github\.com\/shawntabrizi\/arcade-dashboard.*SPEC\.md/,
+    );
+  });
+
+  test("deep-linking to #/about renders the page directly", async ({ page }) => {
+    await page.goto("/#/about");
+    await expect(page.locator(".about__title")).toBeVisible();
+  });
+});

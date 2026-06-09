@@ -4,9 +4,10 @@
 
 import { useEffect, useState } from "react";
 import { useReads } from "./reads-context";
-import { useRoute } from "./router";
+import { aboutHref, useRoute } from "./router";
 import { Home } from "./pages/Home";
 import { GameDetail } from "./pages/GameDetail";
+import { About } from "./pages/About";
 
 export function App() {
   const reads = useReads();
@@ -30,21 +31,31 @@ export function App() {
         <a className="app__brand" href="#/">
           <span className="app__logo">◆</span> Polkadot Arcade
         </a>
-        <span className="app__block">
-          {block === null ? (
-            <span className="muted">connecting…</span>
-          ) : (
-            <>
-              <span className="app__pulse" /> best block{" "}
-              <code>#{block.toLocaleString()}</code>
-            </>
-          )}
-        </span>
+        <nav className="app__nav">
+          <a
+            className={`app__navlink${route.name === "about" ? " app__navlink--active" : ""}`}
+            href={aboutHref()}
+          >
+            About
+          </a>
+          <span className="app__block">
+            {block === null ? (
+              <span className="muted">connecting…</span>
+            ) : (
+              <>
+                <span className="app__pulse" /> best block{" "}
+                <code>#{block.toLocaleString()}</code>
+              </>
+            )}
+          </span>
+        </nav>
       </header>
 
       <main className="app__main">
         {route.name === "home" ? (
           <Home blockKey={blockKey} />
+        ) : route.name === "about" ? (
+          <About />
         ) : (
           <GameDetail address={route.address} blockKey={blockKey} />
         )}
