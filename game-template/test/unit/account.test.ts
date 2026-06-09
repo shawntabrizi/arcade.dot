@@ -31,10 +31,10 @@ describe("faucetUrl", () => {
   });
 });
 
-describe("derivationPath", () => {
-  it("renders the soft-junction path used by the host", () => {
+describe("derivationPath (SURI-style, soft junctions)", () => {
+  it("renders the soft-junction (single-slash) path from the seed", () => {
     expect(derivationPath("arcade-snake.dot", 0)).toBe(
-      "product / arcade-snake.dot / 0",
+      "<seed>/product/arcade-snake.dot/0",
     );
   });
 });

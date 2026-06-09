@@ -82,44 +82,39 @@ function openHostUrl(url: string): void {
   }
 }
 
-// Truncate an SS58 for display (shortAddress is H160-shaped; SS58 isn't 0x).
-function shortSs58(ss58: string): string {
-  return ss58.length > 14 ? `${ss58.slice(0, 6)}…${ss58.slice(-6)}` : ss58;
-}
-
-// One labelled, copyable address row (used for both the SS58 and H160).
+// One labelled, copyable address row (used for both the SS58 and H160). The
+// address gets its OWN full-width line and is shown IN FULL — it wraps only when
+// it genuinely doesn't fit (break-all), instead of being pre-truncated. The
+// label + Copy button share the row above, so the copy button never steals the
+// address's horizontal space.
 function AddressRow({
   label,
   full,
-  short,
   copyKey,
   copied,
   onCopy,
 }: {
   label: string;
   full: string;
-  short: string;
   copyKey: string;
   copied: string | null;
   onCopy: (key: string, text: string) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2">
-      <div className="min-w-0">
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-secondary m-0">{label}</p>
-        <code className="text-sm text-primary break-all" title={full}>
-          {short}
-        </code>
+        <button
+          type="button"
+          onClick={() => onCopy(copyKey, full)}
+          aria-label={`Copy ${label}`}
+          className="shrink-0 inline-flex items-center gap-1 bg-surface-nested text-secondary hover:text-primary rounded-small px-2 py-1 text-xs transition-colors cursor-pointer"
+        >
+          {copied === copyKey ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+          {copied === copyKey ? "Copied" : "Copy"}
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={() => onCopy(copyKey, full)}
-        aria-label={`Copy ${label}`}
-        className="shrink-0 inline-flex items-center gap-1 bg-surface-nested text-secondary hover:text-primary rounded-small px-2 py-1 text-xs transition-colors cursor-pointer"
-      >
-        {copied === copyKey ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-        {copied === copyKey ? "Copied" : "Copy"}
-      </button>
+      <code className="text-sm text-primary break-all leading-snug">{full}</code>
     </div>
   );
 }
@@ -646,7 +641,16 @@ export function App() {
                     <dd className="text-primary m-0">{account.derivationIndex}</dd>
                   </dl>
                   <p className="text-xs text-tertiary m-0">
-                    Your main Polkadot account stays private to the host and isn&rsquo;t shown here.
+                    Soft derivation (single <code>/</code>) from your seed, which stays private to
+                    the host.{" "}
+                    <a
+                      href="https://wiki.polkadot.com/learn/learn-account-advanced/#derivation-paths"
+                      target="_blank"
+                      rel="noopener"
+                      className="text-link hover:text-link-hover underline"
+                    >
+                      What&rsquo;s a derivation path?
+                    </a>
                   </p>
                 </div>
 
@@ -662,7 +666,6 @@ export function App() {
                   <AddressRow
                     label="Your account (SS58)"
                     full={account.ss58}
-                    short={shortSs58(account.ss58)}
                     copyKey="ss58"
                     copied={copied}
                     onCopy={copy}
@@ -670,7 +673,6 @@ export function App() {
                   <AddressRow
                     label="In-game ID (H160)"
                     full={account.h160}
-                    short={shortAddress(account.h160)}
                     copyKey="h160"
                     copied={copied}
                     onCopy={copy}

@@ -35,9 +35,12 @@ export function faucetUrl(ss58: string): string {
   return `https://faucet.polkadot.io/?${q.toString()}`;
 }
 
-// Human-readable product-account derivation path (display only). The host
-// derives the product account from the user's root account (kept private by the
-// host) as soft junctions: product / <identifier> / <index>.
+// SURI-style product-account derivation path (display only). The host derives
+// the product account from the user's seed via three sr25519 SOFT junctions —
+// product / <dotNS id> / <index> — so single slashes ("/", soft), NOT "//"
+// (hard). Soft derivation is composable on the public key, which is how the host
+// derives the address without the seed. See product-sdk keys/product-account.ts
+// (HDKD.publicSoft) and the Polkadot wiki on derivation paths.
 export function derivationPath(identifier: string, index: number): string {
-  return `product / ${identifier} / ${index}`;
+  return `<seed>/product/${identifier}/${index}`;
 }

@@ -38,7 +38,7 @@ test("Account tab shows derivation, addresses, balance and mapped status", async
   });
 
   // Derivation path + the private-root-account note.
-  await expect(page.getByText("product / arcade-snake.dot / 0")).toBeVisible();
+  await expect(page.getByText("<seed>/product/arcade-snake.dot/0")).toBeVisible();
   await expect(page.getByText("private to the host", { exact: false })).toBeVisible();
 
   // Addresses (truncated) + a copy control for each.
@@ -113,7 +113,7 @@ test("desktop: right column tabs between Scoreboard (default) and Account", asyn
   await expect(page.locator(".panel-account")).toBeVisible();
   await expect(page.locator(".panel-boards")).toBeHidden();
   // Already loaded on sign-in — content shows, never the error fallback.
-  await expect(page.getByText("product / arcade-snake.dot / 0")).toBeVisible();
+  await expect(page.getByText("<seed>/product/arcade-snake.dot/0")).toBeVisible();
   await expect(page.getByText("1.5 PAS")).toBeVisible();
   await expect(page.getByText("Couldn't load your account.")).toHaveCount(0);
 
