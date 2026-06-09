@@ -23,9 +23,10 @@ describe("formatBalance", () => {
 });
 
 describe("faucetUrl", () => {
-  it("prefills the SS58 address as the ?address= param", () => {
-    expect(faucetUrl("5Grw…abc")).toBe(
-      "https://faucet.dot.li/?address=5Grw%E2%80%A6abc",
+  it("targets the public Polkadot faucet with network, parachain and address", () => {
+    const url = faucetUrl("5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY");
+    expect(url).toBe(
+      "https://faucet.polkadot.io/?network=paseo&parachain=1000&address=5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
     );
   });
 });

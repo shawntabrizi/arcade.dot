@@ -42,16 +42,20 @@ test("Account tab shows derivation, addresses, balance and mapped status", async
   await expect(page.getByText("private to the host", { exact: false })).toBeVisible();
 
   // Addresses (truncated) + a copy control for each.
-  await expect(page.getByText("Address (SS58)")).toBeVisible();
-  await expect(page.getByText("Contract address (H160)")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Copy Address (SS58)" })).toBeVisible();
+  await expect(page.getByText("Your account (SS58)")).toBeVisible();
+  await expect(page.getByText("In-game ID (H160)")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy Your account (SS58)" })).toBeVisible();
 
   // Balance formatted with the symbol, and mapped status.
   await expect(page.getByText("1.5 PAS")).toBeVisible();
   await expect(page.getByText("ready to save scores")).toBeVisible();
 
   // Faucet action present; no Map button when already mapped.
-  await expect(page.getByRole("button", { name: "Get test funds" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Get test funds" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Get test funds" })).toHaveAttribute(
+    "href",
+    /faucet\.polkadot\.io.*address=/,
+  );
   await expect(page.getByRole("button", { name: "Map account to save scores" })).toHaveCount(0);
 });
 

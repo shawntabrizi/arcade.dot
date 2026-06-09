@@ -19,11 +19,20 @@ export function formatBalance(planck: bigint, decimals: number, maxFrac = 4): st
   return fracStr ? `${whole}.${fracStr}` : whole.toString();
 }
 
-// The host faucet URL prefilled with an address. Per the host funding model the
-// faucet takes the account's SS58 (not its H160). Opened in-host via navigateTo
-// (faucet.dot is itself a host app), with a new-tab web fallback.
+// Faucet link, prefilled with the account's SS58. The host faucet (faucet.dot,
+// which would fund THIS exact chain) isn't deployed yet, so point at the public
+// Polkadot testnet faucet as a stopgap. Query params per
+// paritytech/polkadot-testnet-faucet (client/README): network + parachain +
+// address; Paseo Asset Hub is parachain 1000. It's an external site (not a .dot
+// app), so the UI opens it with a normal target=_blank link, not navigateTo.
+export const FAUCET_PARACHAIN_ID = 1000;
 export function faucetUrl(ss58: string): string {
-  return `https://faucet.dot.li/?address=${encodeURIComponent(ss58)}`;
+  const q = new URLSearchParams({
+    network: "paseo",
+    parachain: String(FAUCET_PARACHAIN_ID),
+    address: ss58,
+  });
+  return `https://faucet.polkadot.io/?${q.toString()}`;
 }
 
 // Human-readable product-account derivation path (display only). The host

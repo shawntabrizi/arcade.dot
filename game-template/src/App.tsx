@@ -67,10 +67,11 @@ const GAME_KEY = getGcsAddress() ?? "local";
 type Phase = "idle" | "submitting" | "submitted" | "error";
 type Tab = "play" | "scores" | "recent" | "account";
 
-// Open a .dot host app URL. Inside the host this MUST go through navigateTo (the
-// desktop webview denies window.open / target=_blank, so a plain anchor does
-// nothing); standalone web falls back to a new tab. Used for the Arcade back
-// link and the faucet (faucet.dot.li is itself a host app).
+// Open a .dot host app URL (the Arcade back link). Inside the host this MUST go
+// through navigateTo — the desktop webview denies window.open/target=_blank for
+// in-host app navigation, so a plain anchor does nothing; standalone web falls
+// back to a new tab. (External sites like the faucet are different: a normal
+// target=_blank link is fine — the host opens those in the system browser.)
 function openHostUrl(url: string): void {
   if (isInsideContainerSync()) {
     void getTruApi().then((t) => {
@@ -79,10 +80,6 @@ function openHostUrl(url: string): void {
   } else {
     window.open(url, "_blank", "noopener");
   }
-}
-
-function openFaucet(ss58: string): void {
-  openHostUrl(faucetUrl(ss58));
 }
 
 // Truncate an SS58 for display (shortAddress is H160-shaped; SS58 isn't 0x).
@@ -595,9 +592,10 @@ export function App() {
         <section className="panel panel-account" hidden={tab !== "account"} aria-label="Account">
           <div className="w-full max-w-[420px] mx-auto p-4 flex flex-col gap-4">
             <header className="text-center">
-              <h2 className="text-lg font-semibold text-primary m-0">Your account</h2>
+              <h2 className="text-lg font-semibold text-primary m-0">Your Product Account</h2>
               <p className="text-sm text-secondary m-0 mt-1">
-                How this game identifies you on-chain.
+                The per-app account this game uses for you — its addresses and balance are all part
+                of it.
               </p>
             </header>
 
@@ -628,12 +626,15 @@ export function App() {
             ) : accountLoading && !account ? (
               <p className="text-sm text-secondary m-0">Loading your account…</p>
             ) : account ? (
-              <>
-                {/* Derivation */}
-                <div className="bg-surface-container rounded-container p-4 flex flex-col gap-2">
-                  <p className="text-sm font-semibold text-primary m-0">Product account</p>
+              // ONE card for the whole product account, with divider-separated
+              // subsections (derivation → its addresses → its balance) so it's
+              // unmistakable that the addresses and balance all belong to this
+              // single host-derived account (SPEC §8.1).
+              <div className="bg-surface-container rounded-container p-4 flex flex-col gap-4">
+                {/* How it's derived */}
+                <div className="flex flex-col gap-2">
                   <p className="text-sm text-secondary m-0">
-                    This game uses a per-app account the Polkadot host derives for you:
+                    Derived for you by the Polkadot host as:
                   </p>
                   <code className="text-xs text-primary bg-surface-nested rounded-small px-2 py-1 break-all">
                     {derivationPath(account.identifier, account.derivationIndex)}
@@ -649,10 +650,17 @@ export function App() {
                   </p>
                 </div>
 
-                {/* Addresses */}
-                <div className="bg-surface-container rounded-container p-4 flex flex-col gap-3">
+                <div className="border-t border-divider" />
+
+                {/* Its addresses — same account in two formats: SS58 is the
+                    Polkadot account; the H160 is its Ethereum-compatible "in-game
+                    ID" the contract sees you by. */}
+                <div className="flex flex-col gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-tertiary m-0">
+                    Its addresses
+                  </p>
                   <AddressRow
-                    label="Address (SS58)"
+                    label="Your account (SS58)"
                     full={account.ss58}
                     short={shortSs58(account.ss58)}
                     copyKey="ss58"
@@ -660,17 +668,25 @@ export function App() {
                     onCopy={copy}
                   />
                   <AddressRow
-                    label="Contract address (H160)"
+                    label="In-game ID (H160)"
                     full={account.h160}
                     short={shortAddress(account.h160)}
                     copyKey="h160"
                     copied={copied}
                     onCopy={copy}
                   />
+                  <p className="text-xs text-tertiary m-0">
+                    Same account — your in-game ID is its Ethereum-compatible form.
+                  </p>
                 </div>
 
-                {/* Balance, mapping, faucet */}
-                <div className="bg-surface-container rounded-container p-4 flex flex-col gap-3">
+                <div className="border-t border-divider" />
+
+                {/* Its balance & status */}
+                <div className="flex flex-col gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-tertiary m-0">
+                    Its balance &amp; status
+                  </p>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-secondary">Balance</span>
                     <span className="text-sm font-semibold text-primary">
@@ -678,7 +694,7 @@ export function App() {
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-secondary">Status</span>
+                    <span className="text-sm text-secondary">Mapping</span>
                     {account.mapped ? (
                       <span className="text-sm text-success">Mapped — ready to save scores</span>
                     ) : (
@@ -695,22 +711,26 @@ export function App() {
                       {mapping ? "Mapping…" : "Map account to save scores"}
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => openFaucet(account.ss58)}
-                    className="bg-action-primary text-primary-inverted font-medium text-sm px-4 py-2 rounded-small hover:bg-action-primary-hover transition-colors cursor-pointer"
+                  {/* External site (the public Polkadot faucet) — a normal
+                      target=_blank link, which the host opens in the system
+                      browser. NOT navigateTo (that's for in-host .dot apps). */}
+                  <a
+                    href={faucetUrl(account.ss58)}
+                    target="_blank"
+                    rel="noopener"
+                    className="inline-flex items-center justify-center bg-action-primary text-primary-inverted font-medium text-sm px-4 py-2 rounded-small hover:bg-action-primary-hover transition-colors cursor-pointer no-underline"
                   >
                     Get test funds
-                  </button>
+                  </a>
                   <p className="text-xs text-tertiary m-0">
-                    Storage deposits for saving scores are reserved from this account — top it up
-                    with the faucet if saving fails.
+                    Funds the SS58 above. Saving a score reserves a small storage deposit from this
+                    account — top it up here if saving fails.
                   </p>
                   {accountError && (
                     <p className="text-sm text-error m-0 break-words">{accountError}</p>
                   )}
                 </div>
-              </>
+              </div>
             ) : (
               <p className="text-sm text-error m-0 break-words">
                 {accountError ?? "Couldn't load your account."}
