@@ -23,9 +23,12 @@ export function formatBalance(planck: bigint, decimals: number, maxFrac = 4): st
 // which would fund THIS exact chain) isn't deployed yet, so point at the public
 // Polkadot testnet faucet as a stopgap. Query params per
 // paritytech/polkadot-testnet-faucet (client/README): network + parachain +
-// address; Paseo Asset Hub is parachain 1000. It's an external site (not a .dot
-// app), so the UI opens it with a normal target=_blank link, not navigateTo.
-export const FAUCET_PARACHAIN_ID = 1000;
+// address. Our games run on "Paseo Asset Hub Next" — parachain 1500 in the
+// faucet's Paseo list (added in faucet PR #512), NOT 1000 (the standard Asset
+// Hub, a different chain whose drips our accounts would never see). It's an
+// external site (not a .dot app), so the UI opens it with a normal
+// target=_blank link, not navigateTo.
+export const FAUCET_PARACHAIN_ID = 1500;
 export function faucetUrl(ss58: string): string {
   const q = new URLSearchParams({
     network: "paseo",

@@ -23,10 +23,10 @@ describe("formatBalance", () => {
 });
 
 describe("faucetUrl", () => {
-  it("targets the public Polkadot faucet with network, parachain and address", () => {
+  it("targets the public faucet's Asset Hub NEXT (1500) — the chain the games run on", () => {
     const url = faucetUrl("5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY");
     expect(url).toBe(
-      "https://faucet.polkadot.io/?network=paseo&parachain=1000&address=5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+      "https://faucet.polkadot.io/?network=paseo&parachain=1500&address=5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
     );
   });
 });
