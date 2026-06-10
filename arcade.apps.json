@@ -1,0 +1,11 @@
+{
+  "_comment": "Manifest for `playground deploy-all` (playground-cli >= 0.33): all six arcade apps in one batch invocation. `dir` is relative to this file; `buildDir` is relative to `dir`. The five games share ONE project dir with per-game config baked in at BUILD time (active.ts + arcade.config.json + cdm.json), so deploy.sh builds each game sequentially into its own dist-<domain> and runs deploy-all with --no-build; the dashboard builds normally into dist.",
+  "apps": [
+    { "name": "arcade-snake", "dir": "game-template", "domain": "arcade-snake", "buildDir": "dist-arcade-snake" },
+    { "name": "arcade-flappy", "dir": "game-template", "domain": "arcade-flappy", "buildDir": "dist-arcade-flappy" },
+    { "name": "arcade-wordle", "dir": "game-template", "domain": "arcade-wordle", "buildDir": "dist-arcade-wordle" },
+    { "name": "arcade-2048-game", "dir": "game-template", "domain": "arcade-2048-game", "buildDir": "dist-arcade-2048-game" },
+    { "name": "arcade-invaders", "dir": "game-template", "domain": "arcade-invaders", "buildDir": "dist-arcade-invaders" },
+    { "name": "arcade", "dir": "dashboard", "domain": "arcade", "buildDir": "dist" }
+  ]
+}
