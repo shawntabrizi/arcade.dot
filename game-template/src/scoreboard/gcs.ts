@@ -1,8 +1,9 @@
-import { createClient, type PolkadotClient } from "polkadot-api";
+import { createClient, Binary, type PolkadotClient } from "polkadot-api";
 // polkadot-api 2.x removed the `polkadot-api/ws-provider/*` subpaths; the WS
 // provider now ships as the standalone `@polkadot-api/ws-provider` package.
 import { getWsProvider } from "@polkadot-api/ws-provider";
 import { createInkSdk } from "@polkadot-api/sdk-ink";
+import { encodeFunctionData, decodeFunctionResult, type Abi } from "viem";
 import cdmJson from "../../cdm.json";
 
 // The one game contract the template talks to: the GCS reference (SPEC §4.6).
@@ -82,16 +83,77 @@ export function gcsContract(): any | null {
   return inkSdkBest().getContract({ abi: entry.abi }, entry.address);
 }
 
+// Lower-case hex for a byte buffer (browser-safe; no Node Buffer).
+function toHex(u: Uint8Array): `0x${string}` {
+  let s = "0x";
+  for (const b of u) s += b.toString(16).padStart(2, "0");
+  return s as `0x${string}`;
+}
+
 // A best-block read (dry-run). `origin` MUST be a mapped account (see
 // READ_ORIGIN) or pallet_revive reverts with AccountUnmapped. Returns the
 // decoded value, or null on a reverted/failed query.
+//
+// We go through the runtime-COMPATIBLE `ReviveApi.call` runtime entry — NOT the
+// ink SDK's `contract.query`, which routes through `ReviveApi.trace_call`.
+// paseo-next-v2 exposes `trace_call` with an incompatible signature, so the ink
+// query throws `Incompatible runtime entry RuntimeCall(ReviveApi_trace_call)` —
+// the error that broke getBest at game-over and the submit dry-run in-host
+// (confirmed live). `ReviveApi.call` is the same standard entry the proven
+// dApp-factory template uses; we encode/decode the SolAbi message with viem.
 export async function gcsQuery<T>(
   method: string,
   data: Record<string, unknown>,
   origin: string,
 ): Promise<T | null> {
-  const contract = gcsContract();
-  if (!contract) return null;
-  const r = await contract.query(method, { origin, data });
-  return r.success ? (r.value.response as T) : null;
+  const entry = contractEntry();
+  if (!entry) return null;
+  const abi = entry.abi as Abi;
+  // Map the named-arg object onto positional args in the ABI's declared order.
+  const items = entry.abi as { type?: string; name?: string; inputs?: { name: string }[] }[];
+  const fn = items.find((x) => x.type === "function" && x.name === method);
+  if (!fn) return null;
+  const args = (fn.inputs ?? []).map((i) => data[i.name]);
+
+  const input = encodeFunctionData({
+    abi,
+    functionName: method as never,
+    args: args as never,
+  });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const api = getClient().getUnsafeApi() as any;
+  // ReviveApi::call(origin, dest, value, gas_limit?, storage_deposit_limit?, input)
+  const res = await api.apis.ReviveApi.call(
+    origin,
+    entry.address,
+    0n,
+    undefined,
+    undefined,
+    Binary.fromHex(input),
+    { at: "best" },
+  );
+
+  // Result<ExecReturnValue, DispatchError>. A reverted call still returns Ok
+  // with the Revert flag (bit 0) set; a trapped/failed call returns !success.
+  if (!res?.result?.success) return null;
+  const ev = res.result.value;
+  if ((Number(ev?.flags ?? 0) & 1) === 1) return null;
+
+  const d = ev?.data;
+  const retHex =
+    typeof d?.asHex === "function"
+      ? (d.asHex() as `0x${string}`)
+      : d instanceof Uint8Array
+        ? toHex(d)
+        : typeof d === "string"
+          ? (d as `0x${string}`)
+          : undefined;
+  if (!retHex) return null;
+
+  try {
+    return decodeFunctionResult({ abi, functionName: method as never, data: retHex }) as T;
+  } catch {
+    return null;
+  }
 }

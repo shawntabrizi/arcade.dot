@@ -1,14 +1,14 @@
-// The real ArcadeReads implementation: PAPI + @polkadot-api/sdk-ink against
-// Paseo Asset Hub, best-block reads, no account / no signer / no writes
-// (SPEC §7, §8.4). Reuses the game-template's gcs.ts wiring idiom
-// (createClient(getWsProvider) + createInkSdk(client, { atBest: true })) — reads
-// are free dry-runs that work over WebSocket in both a Triangle host and a plain
-// browser, so no host/standalone branching is needed here. A host-provider seam
-// is left as a documented TODO (item 13/host adoption).
+// The real ArcadeReads implementation: PAPI against Paseo Asset Hub, best-block
+// reads, no account / no signer / no writes (SPEC §7, §8.4). Reads go through
+// the runtime-compatible ReviveApi.call entry + viem encode/decode (mirroring
+// the game-template's gcs.ts) — NOT the ink SDK's contract.query, which routes
+// through ReviveApi.trace_call and is incompatible with the paseo-next-v2
+// runtime. Reads are free dry-runs that work over WebSocket in both a Triangle
+// host and a plain browser, so no host/standalone branching is needed here.
 
 import { createClient, type PolkadotClient } from "polkadot-api";
 import { getWsProvider } from "polkadot-api/ws-provider/web";
-import { createInkSdk } from "@polkadot-api/sdk-ink";
+import { encodeFunctionData, decodeFunctionResult, type Abi } from "viem";
 import cdmJson from "../cdm.json";
 import dotnsReverseResolverAbi from "./abis/DotnsReverseResolver.json";
 import type { ArcadeReads } from "./arcade-reads";
@@ -99,66 +99,115 @@ function client(): PolkadotClient {
 export function closeChainReads(): void {
   _client?.destroy();
   _client = null;
-  _ink = null;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _ink: any = null;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function ink(): any {
-  // Best-block reads (SPEC §7.4): a fresh submitScore is visible within a block.
-  if (!_ink) _ink = createInkSdk(client(), { atBest: true });
-  return _ink;
+// The three contracts the dashboard reads, as {address, abi} entries. We no
+// longer build ink SDK contract objects: reads go through the runtime-compatible
+// ReviveApi.call entry (see q() below), so all we need is the address + ABI.
+function registryContract(): ContractEntry {
+  return registryEntry();
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _registry: any = null;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function registry(): any {
-  if (!_registry) {
-    const e = registryEntry();
-    _registry = ink().getContract({ abi: e.abi }, e.address);
-  }
-  return _registry;
+function resolverContract(): ContractEntry {
+  return { address: DOTNS_REVERSE_RESOLVER, abi: dotnsReverseResolverAbi as unknown[] };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _resolver: any = null;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function resolver(): any {
-  if (!_resolver) {
-    try {
-      _resolver = ink().getContract(
-        { abi: dotnsReverseResolverAbi as unknown[] },
-        DOTNS_REVERSE_RESOLVER,
-      );
-    } catch {
-      return null; // resolver not deployable/found → callers use the fallback
-    }
-  }
-  return _resolver;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const _gameContracts = new Map<string, any>();
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function game(address: Address): any {
+const _gameEntries = new Map<string, ContractEntry>();
+function gameContract(address: Address): ContractEntry {
   const key = address.toLowerCase();
-  let c = _gameContracts.get(key);
-  if (!c) {
-    c = ink().getContract({ abi: gcsAbi() }, address);
-    _gameContracts.set(key, c);
+  let e = _gameEntries.get(key);
+  if (!e) {
+    e = { address, abi: gcsAbi() };
+    _gameEntries.set(key, e);
   }
-  return c;
+  return e;
 }
 
-// One best-block dry-run read; null on a reverted/failed query (treated as
-// "non-conformant / absent" by callers).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function q<T>(contract: any, method: string, data: Record<string, unknown> = {}): Promise<T | null> {
+// Lower-case hex for a byte buffer (browser-safe; no Node Buffer).
+function toHex(u: Uint8Array): `0x${string}` {
+  let s = "0x";
+  for (const b of u) s += b.toString(16).padStart(2, "0");
+  return s as `0x${string}`;
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const h = hex.startsWith("0x") ? hex.slice(2) : hex;
+  const u = new Uint8Array(h.length / 2);
+  for (let i = 0; i < u.length; i++) u[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+  return u;
+}
+
+// A version-proof Binary-like for runtime-call byte args (dest H160 + input
+// calldata). The dashboard's papi 1.x tree duplicates substrate-bindings and the
+// ESM-resolved `Binary` lacks asBytes(); the SCALE codec only duck-types
+// asBytes()/asHex(), so a plain object satisfies it regardless of which version
+// resolves. (papi 2.x accepts a bare hex string for these; 1.x does not.)
+function bin(hex: string): { asBytes: () => Uint8Array; asHex: () => string } {
+  return { asBytes: () => hexToBytes(hex), asHex: () => hex };
+}
+
+// One best-block dry-run read; null on a reverted/failed/incompatible query
+// (treated as "non-conformant / absent" by callers).
+//
+// We go through the runtime-COMPATIBLE `ReviveApi.call` entry — NOT the ink
+// SDK's `contract.query`, which routes through `ReviveApi.trace_call`.
+// paseo-next-v2 exposes `trace_call` with an incompatible signature, so the ink
+// query throws `Incompatible runtime entry RuntimeCall(ReviveApi_trace_call)`,
+// which `q` would swallow to null → every game reads as non-conformant → an
+// empty dashboard. `ReviveApi.call` is the same standard entry the game's
+// gcs.ts uses (proven live); we encode/decode the SolAbi message with viem. The
+// decoded shapes match the ABI's snake_case components, so toListing/toEntries
+// and the getListing isSome/value handling are unchanged.
+async function q<T>(
+  entry: ContractEntry,
+  method: string,
+  data: Record<string, unknown> = {},
+): Promise<T | null> {
+  const abi = entry.abi as Abi;
+  const items = entry.abi as { type?: string; name?: string; inputs?: { name: string }[] }[];
+  const fn = items.find((x) => x.type === "function" && x.name === method);
+  if (!fn) return null;
+  // Map the named-arg object onto positional args in the ABI's declared order.
+  const args = (fn.inputs ?? []).map((i) => data[i.name]);
+
+  let input: `0x${string}`;
   try {
-    const r = await contract.query(method, { origin: READ_ORIGIN, data });
-    return r.success ? (r.value.response as T) : null;
+    input = encodeFunctionData({ abi, functionName: method as never, args: args as never });
+  } catch {
+    return null;
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const api = client().getUnsafeApi() as any;
+    // ReviveApi::call(origin, dest, value, gas_limit?, storage_deposit_limit?, input)
+    const res = await api.apis.ReviveApi.call(
+      READ_ORIGIN,
+      bin(entry.address),
+      0n,
+      undefined,
+      undefined,
+      bin(input),
+      { at: "best" },
+    );
+    // Result<ExecReturnValue, DispatchError>. A reverted call still returns Ok
+    // with the Revert flag (bit 0) set; a trapped/failed call returns !success.
+    if (!res?.result?.success) return null;
+    const ev = res.result.value;
+    if ((Number(ev?.flags ?? 0) & 1) === 1) return null;
+
+    const d = ev?.data;
+    const retHex =
+      typeof d?.asHex === "function"
+        ? (d.asHex() as `0x${string}`)
+        : d instanceof Uint8Array
+          ? toHex(d)
+          : typeof d === "string"
+            ? (d as `0x${string}`)
+            : undefined;
+    if (!retHex) return null;
+
+    return decodeFunctionResult({ abi, functionName: method as never, data: retHex }) as T;
   } catch {
     return null;
   }
@@ -230,7 +279,7 @@ const conformanceCache = new Map<string, boolean>();
 // Read ONLY Module A stats (SPEC §7.4 batched per game) — the mutable surface
 // refreshed every best block. Failed reads degrade to 0 rather than blanking.
 async function readStats(address: Address): Promise<GameStats> {
-  const c = game(address);
+  const c = gameContract(address);
   const [playCount, uniquePlayers, lastPlayedAt] = await Promise.all([
     q<number | bigint>(c, "playCount"),
     q<number | bigint>(c, "uniquePlayers"),
@@ -249,7 +298,7 @@ async function isAddressConformant(address: Address): Promise<boolean> {
   const key = address.toLowerCase();
   const cached = conformanceCache.get(key);
   if (cached !== undefined) return cached;
-  const version = await q<number>(game(address), "arcadeVersion");
+  const version = await q<number>(gameContract(address), "arcadeVersion");
   const ok = isConformant(version === null ? null : Number(version));
   conformanceCache.set(key, ok);
   return ok;
@@ -275,7 +324,7 @@ async function enumerateListings(): Promise<Map<Address, Listing>> {
   // Loop pages until a short page. Bounded by gameCount; the §9.2 envelope
   // is ~100 games.
   for (;;) {
-    const page = await q<RawGameEntry[]>(registry(), "getGames", {
+    const page = await q<RawGameEntry[]>(registryContract(), "getGames", {
       offset,
       limit: REGISTRY_PAGE,
     });
@@ -331,7 +380,7 @@ export function createChainReads(): ArcadeReads {
       let listing = listingCache.get(address.toLowerCase());
       if (!listing) {
         const opt = await q<{ isSome: boolean; value: RawListing }>(
-          registry(),
+          registryContract(),
           "getListing",
           { game: address },
         );
@@ -348,7 +397,7 @@ export function createChainReads(): ArcadeReads {
       const key = address.toLowerCase();
       const cached = scoreConfigCache.get(key);
       if (cached) return cached;
-      const c = game(address);
+      const c = gameContract(address);
       const [ordering, format, unit] = await Promise.all([
         q<number>(c, "scoreOrdering"),
         q<number>(c, "scoreFormat"),
@@ -364,11 +413,11 @@ export function createChainReads(): ArcadeReads {
     },
 
     async getLeaderboard(address, offset, limit): Promise<ScoreEntry[]> {
-      return toEntries(await q<RawEntry[]>(game(address), "getLeaderboard", { offset, limit }));
+      return toEntries(await q<RawEntry[]>(gameContract(address), "getLeaderboard", { offset, limit }));
     },
 
     async getRecent(address, offset, limit): Promise<ScoreEntry[]> {
-      return toEntries(await q<RawEntry[]>(game(address), "getRecent", { offset, limit }));
+      return toEntries(await q<RawEntry[]>(gameContract(address), "getRecent", { offset, limit }));
     },
 
     // SPEC §8.2 player display names: DotnsReverseResolver.nameOf(player H160).
@@ -390,7 +439,7 @@ export function createChainReads(): ArcadeReads {
       // lookup rejected with "Contract not found" as an unhandled rejection.)
       let resolved = fallback;
       try {
-        const c = resolver();
+        const c = resolverContract();
         if (c) {
           const name = await q<string>(c, "nameOf", { addr: player });
           if (name && name.length > 0) resolved = name;
