@@ -182,23 +182,29 @@ export function formatDuration(ms: bigint): string {
     .padStart(3, "0")}`;
 }
 
-// ---- playUrl → dot.li launch URL (SPEC §7.5) ----------------------------
-// The Play button is a plain anchor to https://<label>.dot.li. A playUrl may be:
-//   - a bare DotNS name:        "snake.dot"        → https://snake.dot.li
-//   - a bare label:             "snake"            → https://snake.dot.li
-//   - a full dot.li URL:        "https://x.dot.li" → unchanged
+// ---- playUrl → paseo.li launch URL (SPEC §7.5) --------------------------
+// The Play button is a plain anchor to https://<label>.paseo.li. The platform
+// migrated dot.li → paseo.li (June 2026); dot.li no longer resolves, so we both
+// derive new URLs as .paseo.li AND heal legacy .dot.li values stored on-chain
+// (every listing registered before the migration has a now-dead .dot.li
+// playUrl). A playUrl may be:
+//   - a bare DotNS name:        "snake.dot"          → https://snake.paseo.li
+//   - a bare label:             "snake"              → https://snake.paseo.li
+//   - a legacy dot.li URL:      "https://x.dot.li"   → https://x.paseo.li (healed)
 //   - any other https:// URL:   passed through (registry doesn't validate, §6.2)
 // Returns null for empty/garbage so the UI can disable the button.
 export function toLaunchUrl(playUrl: string): string | null {
   const raw = playUrl.trim();
   if (!raw) return null;
 
-  // Already an absolute http(s) URL: trust it as-is (covers *.dot.li and any
-  // plain https game host the registry permitted).
+  // Already an absolute http(s) URL: trust it, but heal a dead .dot.li host to
+  // the current .paseo.li viewer. Any non-dot.li host passes through unchanged.
   if (/^https?:\/\//i.test(raw)) {
     try {
-      // Validate it parses; reject obviously broken values.
       const u = new URL(raw);
+      if (u.hostname.toLowerCase().endsWith(".dot.li")) {
+        u.hostname = `${u.hostname.slice(0, -".dot.li".length)}.paseo.li`;
+      }
       return u.href;
     } catch {
       return null;
@@ -217,7 +223,7 @@ export function toLaunchUrl(playUrl: string): string | null {
   if (!label) return null;
   // Reject anything with whitespace or a path — labels are DNS-ish.
   if (/[\s/]/.test(label)) return null;
-  return `https://${label}.dot.li`;
+  return `https://${label}.paseo.li`;
 }
 
 // ---- Relative time (SPEC §7.2 "active 2m ago") --------------------------
@@ -243,4 +249,39 @@ export function relativeTime(
 export function shortAddress(address: string): string {
   if (!address.startsWith("0x") || address.length < 11) return address;
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
+// ---- Player display name — abstract the wallet address (SPEC §8.2) ------
+// We never surface a raw wallet address in the UI. A friendly deterministic
+// alias is derived from the address so unmapped players stay distinct without
+// ever showing hex. (Collisions are possible across a very large player set;
+// players who set a DotNS name always show their real username instead.)
+const ALIAS_ADJECTIVES = [
+  "Swift", "Calm", "Bold", "Brave", "Quiet", "Clever", "Lucky", "Keen",
+  "Mellow", "Noble", "Sly", "Witty", "Spry", "Jolly", "Bright", "Stoic",
+];
+const ALIAS_ANIMALS = [
+  "Otter", "Falcon", "Lynx", "Heron", "Fox", "Ibex", "Koi", "Raven",
+  "Mole", "Wren", "Seal", "Hare", "Newt", "Crane", "Vole", "Tern",
+];
+
+export function anonAlias(address: string): string {
+  const hex = address.toLowerCase().replace(/^0x/, "");
+  let h = 0;
+  for (let i = 0; i < hex.length; i++) h = (h * 31 + hex.charCodeAt(i)) >>> 0;
+  const adj = ALIAS_ADJECTIVES[h % ALIAS_ADJECTIVES.length];
+  const animal = ALIAS_ANIMALS[Math.floor(h / ALIAS_ADJECTIVES.length) % ALIAS_ANIMALS.length];
+  return `${adj} ${animal}`;
+}
+
+// Format a player for display. `resolved` is the resolveName output (a DotNS
+// name like "alice.dot", a truncated-address fallback, or undefined before it
+// lands). A resolved DotNS name wins, shown WITHOUT the ".dot" suffix
+// ("alice.dot" → "alice"); anything else falls back to a friendly alias — never
+// the raw address.
+export function displayName(address: string, resolved?: string): string {
+  if (resolved && /\.dot$/i.test(resolved)) {
+    return resolved.replace(/\.dot$/i, "");
+  }
+  return anonAlias(address);
 }

@@ -19,8 +19,15 @@ const FAKE_GATEWAY = import.meta.env.VITE_ARCADE_FAKE_GATEWAY === "1";
 
 // Every arcade game links back to the discovery dashboard (imposed by the shell,
 // so every game gets it for free). Opens in-host via the validated cross-dApp
-// pattern (target=_blank to the .dot.li URL, §7.5). Override with VITE_ARCADE_URL.
-const ARCADE_URL = import.meta.env.VITE_ARCADE_URL || "https://arcade.dot.li";
+// pattern (target=_blank to the .paseo.li URL, §7.5). The platform migrated
+// dot.li → paseo.li (June 2026). Resolution order: VITE_ARCADE_URL (build-time
+// override) → arcade.config.json "arcadeUrl" (per-deploy, survives a plain
+// rebuild) → the public production arcade. Set "arcadeUrl" in config to keep a
+// test/staging build off the colleague's production arcade.
+const ARCADE_URL =
+  import.meta.env.VITE_ARCADE_URL ||
+  (arcadeConfig as { arcadeUrl?: string }).arcadeUrl ||
+  "https://arcade.paseo.li";
 
 // ── Template configuration (SPEC §6.5 / §8.3 / §10.4) ───────────────────────
 // arcade.config.json is the single source of truth (SPEC §6.5). `requiresAccount`
