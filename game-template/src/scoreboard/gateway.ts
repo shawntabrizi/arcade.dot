@@ -19,9 +19,35 @@ export interface SessionInfo {
   account: { ss58: string; h160: `0x${string}` } | null;
 }
 
+// Everything the Account tab shows about the connected PRODUCT account (SPEC
+// §8.1). The host derives this per-app account from the user's root account
+// (which the host keeps private — NOT exposed here), so this is the only
+// identity an app can read. Balances are native-token planck on Asset Hub.
+export interface AccountDetails {
+  identifier: string; // the .dot product identifier, e.g. "arcade-snake.dot"
+  derivationIndex: number; // soft-derivation index (0 for the app's default account)
+  ss58: string; // the product account's SS58 (used by the faucet + balance reads)
+  h160: `0x${string}`; // the H160 the GCS contract sees as caller()
+  free: bigint; // spendable balance (planck)
+  reserved: bigint; // reserved balance (planck) — e.g. storage deposits
+  mapped: boolean; // pallet_revive mapping status (unmapped → can't save scores)
+  decimals: number; // native token decimals (for formatting)
+  symbol: string; // native token symbol (e.g. "PAS")
+}
+
 export interface ChainGateway {
   // Immutable contract metadata (SPEC §4.2). Cached for the session by the impl.
   scoreOrdering(): Promise<ScoreOrdering>;
+
+  // Account-tab read: the connected product account + balance + mapping status,
+  // or null when nobody is signed in (the host only exposes the account once the
+  // user is connected). One round-trip the Account tab calls on open/refresh.
+  accountDetails(): Promise<AccountDetails | null>;
+
+  // Map the connected product account in pallet_revive (map_account) on its own,
+  // so a player can pre-map (reserving the storage deposit) without playing.
+  // No-op if already mapped. submitScore still maps-if-needed in its batch.
+  mapAccount(): Promise<void>;
 
   // PROMPT-FREE login-status read for on-load UX (SPEC §8.1/§8.3). Kicks off
   // the prompt-free product-account fetch (getProductAccount returns

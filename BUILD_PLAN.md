@@ -141,11 +141,50 @@ Test gates: contracts → `cargo test`; template/dashboard logic → unit tests
 - [ ] 17. Dress rehearsal: fresh end-to-end run (prompt → listed game →
       visible on dashboard); fix what breaks; record results here.
 
+## MVP TODO — fund the product account so scores can save (storage deposit)
+
+Status 2026-06-10: MOSTLY SHIPPED — two items remain (verification + the
+save-failure nudge).
+
+Root cause (verified, unchanged): each game uses its own per-app product account
+(host-enforced — a deployed `.dot` must sign as its own `<label>.dot`; subdomains
+do NOT share an account). A fresh product account has ZERO balance, and a
+pallet_revive contract call's STORAGE DEPOSIT is reserved from the signer's free
+balance — the host sponsors FEES (AsPgas) but NOT deposits. So the first save
+reverts `Revive::StorageDepositNotEnoughFunds`. (`AccountUnmapped` is fixed;
+batching is NOT the cause — the single-signature map+submit batch stays.)
+
+What shipped (the template's Account tab, live on all 5 games):
+- Product-account balance + pallet_revive mapping status, a standalone "Map
+  account" button, and a "Get test funds" faucet link.
+- Faucet CONFIRMED: the public faucet now supports our exact chain — Asset Hub
+  NEXT is parachain 1500 in polkadot-testnet-faucet (their PR #512). Link:
+  `https://faucet.polkadot.io/?network=paseo&parachain=1500&address=<SS58>`
+  (`address` takes the SS58, not the H160). External site → plain target=_blank
+  (the host opens the system browser), NOT navigateTo. The in-host faucet.dot is
+  still unpublished; when it ships, swap the link — an `embed=true` iframe
+  drawer is the planned UX for it (the public faucet can't be embedded in-host:
+  shell CSP frame-src + reCAPTCHA domain allowlist).
+
+Remaining:
+1. VERIFY the loop end-to-end once: fresh account → faucet drip (1500) →
+   balance appears in the Account tab → map → score saves.
+2. Save-failure nudge: a broke user tapping "Submit best" still sees the raw
+   StorageDepositNotEnoughFunds error — detect it in the App.tsx error path and
+   surface the faucet link right there, not only in the Account tab.
+
+NOTE: funding is per-account, so the bundled-arcade-app model (all games at one
+origin → one shared account) would make funding one-time — a separate
+architectural decision (SPEC §8.1).
+
 ## Known issues (found while playing locally)
 
 - **Read origin must be pallet_revive-mapped** — FIXED. The dashboard's read
   origin was unmapped → every dry-run reverted `AccountUnmapped` → empty
-  registry. Now uses Alice (mapped). Added `dashboard` live smoke test
+  registry. Now uses pallet_revive's own pallet account
+  (`5EYCAe5ijiYfhaAUBd6H9WGRTsvwFFc7GnhQkiHvBYxdvpbV`, per product-sdk PR #152;
+  initially Alice, replaced because the dev seed shouldn't be load-bearing) —
+  centralized as `READ_ORIGIN` in both apps. Added a `dashboard` live smoke test
   (`npm run test:smoke`) that reads the real registry so this can't silently
   regress (unit/e2e use fakes and stayed green through the bug).
 - **DotNS resolver not found on paseo-next-v2** — OPEN. sdk-ink's

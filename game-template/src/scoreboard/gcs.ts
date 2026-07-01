@@ -1,10 +1,24 @@
-import { createClient, Binary, type PolkadotClient } from "polkadot-api";
+import { createClient, type PolkadotClient } from "polkadot-api";
 // polkadot-api 2.x removed the `polkadot-api/ws-provider/*` subpaths; the WS
 // provider now ships as the standalone `@polkadot-api/ws-provider` package.
 import { getWsProvider } from "@polkadot-api/ws-provider";
+// Route chain access THROUGH the host instead of dialing the RPC directly.
+// A direct WebSocket to the Asset Hub RPC is an external-domain request, so the
+// host prompts "Allow access to web domains?" just to read/write the chain.
+// createPapiProvider tunnels JSON-RPC through the host's own chain connection
+// (no external request, no prompt), with the WS provider as the fallback.
+import { createPapiProvider } from "@novasamatech/host-api-wrapper";
 import { createInkSdk } from "@polkadot-api/sdk-ink";
-import { encodeFunctionData, decodeFunctionResult, type Abi } from "viem";
 import cdmJson from "../../cdm.json";
+
+// Asset Hub genesis for "Paseo Asset Hub Next" (the chain
+// `assetHubEndpoint()` points at). The host routes chain access by genesis
+// hash: createPapiProvider asks `host_feature_supported(Chain, <genesis>)`, and
+// ONLY tunnels through the host when it matches. A WRONG genesis makes that
+// check fail, so it silently opens a direct RPC WebSocket — which makes the host
+// prompt "Allow access to web domains?". Verified live via getChainSpecData().
+const ASSET_HUB_GENESIS =
+  "0xbf0488dbe9daa1de1c08c5f743e26fdc2a4ecd74cf87dd1b4b1eeb99ae4ef19f" as const;
 
 // The one game contract the template talks to: the GCS reference (SPEC §4.6).
 // Its ABI is identical for every conforming game (SPEC §7.4); the deployed
@@ -57,9 +71,23 @@ export function assetHubEndpoint(): string {
   return ep;
 }
 
+// In-host: route ALL chain RPC through the host via createPapiProvider with NO
+// WS fallback. The fallback arg is "for testing purposes only" (host-api-wrapper
+// papiProvider.js) and is exactly what opens a direct WebSocket to the RPC when
+// the host route isn't taken — the thing that triggers the web-domain prompt.
+// With the correct genesis the host serves the chain and no socket is opened.
+// Direct WS only where there is genuinely no host to tunnel through: Node
+// (smoke/boot harnesses, `typeof window === "undefined"`) and local dev.
+function chainProvider(endpoint: string) {
+  const directWs =
+    typeof window === "undefined" ||
+    /^localhost(:\d+)?$/.test(window.location.host);
+  return directWs ? getWsProvider(endpoint) : createPapiProvider(ASSET_HUB_GENESIS);
+}
+
 let client: PolkadotClient | null = null;
 export function getClient(): PolkadotClient {
-  if (!client) client = createClient(getWsProvider(assetHubEndpoint()));
+  if (!client) client = createClient(chainProvider(assetHubEndpoint()));
   return client;
 }
 
@@ -83,77 +111,16 @@ export function gcsContract(): any | null {
   return inkSdkBest().getContract({ abi: entry.abi }, entry.address);
 }
 
-// Lower-case hex for a byte buffer (browser-safe; no Node Buffer).
-function toHex(u: Uint8Array): `0x${string}` {
-  let s = "0x";
-  for (const b of u) s += b.toString(16).padStart(2, "0");
-  return s as `0x${string}`;
-}
-
 // A best-block read (dry-run). `origin` MUST be a mapped account (see
 // READ_ORIGIN) or pallet_revive reverts with AccountUnmapped. Returns the
 // decoded value, or null on a reverted/failed query.
-//
-// We go through the runtime-COMPATIBLE `ReviveApi.call` runtime entry — NOT the
-// ink SDK's `contract.query`, which routes through `ReviveApi.trace_call`.
-// paseo-next-v2 exposes `trace_call` with an incompatible signature, so the ink
-// query throws `Incompatible runtime entry RuntimeCall(ReviveApi_trace_call)` —
-// the error that broke getBest at game-over and the submit dry-run in-host
-// (confirmed live). `ReviveApi.call` is the same standard entry the proven
-// dApp-factory template uses; we encode/decode the SolAbi message with viem.
 export async function gcsQuery<T>(
   method: string,
   data: Record<string, unknown>,
   origin: string,
 ): Promise<T | null> {
-  const entry = contractEntry();
-  if (!entry) return null;
-  const abi = entry.abi as Abi;
-  // Map the named-arg object onto positional args in the ABI's declared order.
-  const items = entry.abi as { type?: string; name?: string; inputs?: { name: string }[] }[];
-  const fn = items.find((x) => x.type === "function" && x.name === method);
-  if (!fn) return null;
-  const args = (fn.inputs ?? []).map((i) => data[i.name]);
-
-  const input = encodeFunctionData({
-    abi,
-    functionName: method as never,
-    args: args as never,
-  });
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const api = getClient().getUnsafeApi() as any;
-  // ReviveApi::call(origin, dest, value, gas_limit?, storage_deposit_limit?, input)
-  const res = await api.apis.ReviveApi.call(
-    origin,
-    entry.address,
-    0n,
-    undefined,
-    undefined,
-    Binary.fromHex(input),
-    { at: "best" },
-  );
-
-  // Result<ExecReturnValue, DispatchError>. A reverted call still returns Ok
-  // with the Revert flag (bit 0) set; a trapped/failed call returns !success.
-  if (!res?.result?.success) return null;
-  const ev = res.result.value;
-  if ((Number(ev?.flags ?? 0) & 1) === 1) return null;
-
-  const d = ev?.data;
-  const retHex =
-    typeof d?.asHex === "function"
-      ? (d.asHex() as `0x${string}`)
-      : d instanceof Uint8Array
-        ? toHex(d)
-        : typeof d === "string"
-          ? (d as `0x${string}`)
-          : undefined;
-  if (!retHex) return null;
-
-  try {
-    return decodeFunctionResult({ abi, functionName: method as never, data: retHex }) as T;
-  } catch {
-    return null;
-  }
+  const contract = gcsContract();
+  if (!contract) return null;
+  const r = await contract.query(method, { origin, data });
+  return r.success ? (r.value.response as T) : null;
 }

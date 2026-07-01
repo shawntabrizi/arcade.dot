@@ -1,5 +1,5 @@
 import type { ScoreOrdering } from "./api";
-import type { ChainGateway, GuestStore, SessionInfo } from "./gateway";
+import type { AccountDetails, ChainGateway, GuestStore, SessionInfo } from "./gateway";
 
 // Namespaced per game so two template games on the same origin don't collide.
 const GUEST_KEY_PREFIX = "arcade:guest-best:";
@@ -32,6 +32,18 @@ export function isWorthKeeping(
 ): boolean {
   if (knownBest === null) return true;
   return ordering === 1 ? score < knownBest : score > knownBest;
+}
+
+// The better of two scores under the ordering (SPEC §4.2); null means "none yet".
+// Used to keep a running session best (App display + the monotonic held best).
+export function pickBetter(
+  a: number | null,
+  b: number | null,
+  ordering: ScoreOrdering,
+): number | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return isWorthKeeping(b, a, ordering) ? b : a;
 }
 
 function guestKey(gameKey: string): string {
@@ -120,9 +132,27 @@ export class Scoreboard {
     return readGuestBest(this.store, this.gameKey);
   }
 
+  // Public read of the active identity's already-recorded best (on-chain for a
+  // signed-in player, persisted locally for a guest). The UI seeds the displayed
+  // "Best" from this so it reflects the player's true record — including scores
+  // from earlier sessions in the contract history — not just this session.
+  async currentBest(): Promise<number | null> {
+    return this.knownBest();
+  }
+
   // Connect a host wallet account (SPEC §8.1). Returns the player's H160.
   async signIn(): Promise<`0x${string}`> {
     return this.gateway.connect();
+  }
+
+  // Account-tab reads/writes (SPEC §8.1). Passthroughs so the UI never reaches
+  // into the gateway. accountDetails() returns null when nobody is signed in.
+  async accountDetails(): Promise<AccountDetails | null> {
+    return this.gateway.accountDetails();
+  }
+
+  async mapAccount(): Promise<void> {
+    return this.gateway.mapAccount();
   }
 
   // Single entry point for a finished match (one call per onGameEnd). NEVER
@@ -134,11 +164,20 @@ export class Scoreboard {
   // never ask the player to sign for a score that wouldn't change the board.
   async onGameEnd(score: number): Promise<GameOverOutcome> {
     const ordering = await this.gateway.scoreOrdering();
-    const best = await this.knownBest();
-    if (!isWorthKeeping(score, best, ordering)) {
+    const saved = await this.knownBest();
+    // The best we'd actually submit: the better of what's already saved (the
+    // signed-in player's on-chain best, or the guest's persisted best) and any
+    // best we're already holding from earlier rounds this session. Comparing the
+    // new score against THIS — not just `saved` — keeps `held` monotonic: a
+    // player who replays and scores worse-but-still-better-than-saved can never
+    // lower the held best they'd submit (the score they came back to submit).
+    const effectiveBest =
+      this.held === null ? saved : pickBetter(saved, this.held, ordering);
+    if (!isWorthKeeping(score, effectiveBest, ordering)) {
       return { kind: "ignored", score };
     }
 
+    // The score beats the effective best → it is the new session best to submit.
     this.held = score;
     if (this.isSignedIn()) {
       // Ask before signing: no phone approval until the player taps Save.

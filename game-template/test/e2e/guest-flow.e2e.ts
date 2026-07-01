@@ -63,71 +63,91 @@ async function submits(page: Page): Promise<number[]> {
   return page.evaluate(() => window.__ARCADE_FAKE__?.state.submits ?? []);
 }
 
-test("1. guest game-over (score > 0) shows the save prompt; dismissing keeps the score across reload", async ({
+test("1. guest game-over (score > 0) offers to submit the best; the held best survives reload", async ({
   page,
 }) => {
   await boot(page, { ordering: 0, player: null });
   await forceGameOver(page, 7);
 
-  // The save-score nudge appears (SPEC §8.3).
-  await expect(page.getByText("Sign in to save your score")).toBeVisible();
+  // The persistent submit affordance appears (SPEC §8.3) — last + best are shown.
+  await expect(page.getByRole("button", { name: "Sign in & submit best" })).toBeVisible();
+  await expect(page.getByText("Best:", { exact: false })).toBeVisible();
 
   // No chain interaction happened on the guest path.
   expect(await submits(page)).toEqual([]);
 
-  // The held score is persisted locally (SPEC §8.3: held locally, survives session).
+  // The held best is persisted locally (SPEC §8.3: held locally, survives session).
   const held = await page.evaluate((k) => window.localStorage.getItem(k), GUEST_BEST_KEY);
   expect(held).toBe("7");
 
-  // Dismiss ("Keep playing as guest") returns to play; the stored score remains.
-  await page.getByRole("button", { name: "Keep playing as guest" }).click();
-  await expect(page.getByText("Sign in to save your score")).toBeHidden();
-
-  // Persists across a reload.
+  // Persists across a reload (no submit needed to keep the local best).
   await page.reload();
   await expect(page.locator("canvas.snake-canvas")).toBeVisible();
   const afterReload = await page.evaluate((k) => window.localStorage.getItem(k), GUEST_BEST_KEY);
   expect(afterReload).toBe("7");
 });
 
-test("2. guest accepts sign-in → exactly ONE submitScore of the held score, prompt gone, board entry shown", async ({
+test("1b. the best persists across a worse round; the submit offer does not vanish", async ({
+  page,
+}) => {
+  await boot(page, { ordering: 0, player: null, connectsTo: CONNECTS_TO });
+  await forceGameOver(page, 9);
+  await expect(page.getByText("Best: 9", { exact: false })).toBeVisible();
+
+  // Restart and play a worse round (4): the best stays 9 and the submit offer
+  // still stands (it does not vanish after a non-best round).
+  await page.getByRole("button", { name: "Play again" }).click();
+  await forceGameOver(page, 4);
+  await expect(page.getByText("Last: 4", { exact: false })).toBeVisible();
+  await expect(page.getByText("Best: 9", { exact: false })).toBeVisible();
+  const submit = page.getByRole("button", { name: "Sign in & submit best" });
+  await expect(submit).toBeVisible();
+
+  // Submitting after the worse round submits the BEST (9), not the last (4).
+  await submit.click();
+  await expect.poll(() => submits(page)).toEqual([9]);
+});
+
+test("2. guest taps submit → exactly ONE submitScore of the held best, offer gone, board entry shown", async ({
   page,
 }) => {
   await boot(page, { ordering: 0, player: null, connectsTo: CONNECTS_TO });
   await forceGameOver(page, 12);
-  await expect(page.getByText("Sign in to save your score")).toBeVisible();
+  const submit = page.getByRole("button", { name: "Sign in & submit best" });
+  await expect(submit).toBeVisible();
 
-  await page.getByRole("button", { name: "Sign in & save" }).click();
+  await submit.click();
 
-  // Exactly one submit, of the held score (SPEC §10.4 submit-once).
+  // Exactly one submit, of the held best (SPEC §10.4 submit-once).
   await expect.poll(() => submits(page)).toEqual([12]);
 
-  // Prompt dismissed; the optimistic board entry (the connected player) shows.
-  await expect(page.getByText("Sign in to save your score")).toBeHidden();
+  // Offer replaced by the saved confirmation; the optimistic board entry shows.
+  await expect(submit).toBeHidden();
+  await expect(page.getByText("Best saved", { exact: false })).toBeVisible();
   await expect(page.locator(".leaderboard .is-you")).toHaveCount(2); // top list + recent list
 });
 
-test("3. signed-in player → game-over ASKS before signing, then submits once on Save", async ({
+test("3. signed-in player → game-over offers submit but signs NOTHING until tapped", async ({
   page,
 }) => {
   await boot(page, { ordering: 0, player: SIGNED_IN_PLAYER });
   await forceGameOver(page, 5);
 
-  // Ask-before-signing: a confirm prompt appears and NOTHING is submitted yet
-  // (no surprise phone approval). It's a "Save?", not the guest "Sign in" nudge.
-  await expect(page.getByText("New best! Save your score?")).toBeVisible();
-  await expect(page.getByText("Sign in to save your score")).toBeHidden();
+  // A "Submit best score" action appears and NOTHING is submitted yet (no
+  // surprise phone approval). It's the signed-in submit, not the guest nudge.
+  const submit = page.getByRole("button", { name: "Submit best score" });
+  await expect(submit).toBeVisible();
   expect(await submits(page)).toEqual([]);
 
-  // Tapping Save submits exactly once.
-  await page.getByRole("button", { name: "Save score" }).click();
+  // Tapping it submits exactly once.
+  await submit.click();
   await expect.poll(() => submits(page)).toEqual([5]);
 });
 
-test("3b. signed-in player → a non-improving score is ignored (no confirm, no submit)", async ({
+test("3b. signed-in player → a non-improving score offers no submit (best already saved)", async ({
   page,
 }) => {
-  // Player already has an on-chain best of 50; a new 30 is not worth keeping.
+  // Player already has an on-chain best of 50; a new 30 is not worth submitting.
   await boot(page, {
     ordering: 0,
     player: SIGNED_IN_PLAYER,
@@ -135,8 +155,27 @@ test("3b. signed-in player → a non-improving score is ignored (no confirm, no 
   });
   await forceGameOver(page, 30);
 
-  await expect(page.getByText("New best! Save your score?")).toBeHidden();
+  await expect(page.getByText("Last: 30", { exact: false })).toBeVisible(); // round registered
+  await expect(page.getByRole("button", { name: "Submit best score" })).toHaveCount(0);
   expect(await submits(page)).toEqual([]);
+});
+
+test("3c. Best is seeded from the contract record, above this session's scores", async ({
+  page,
+}) => {
+  // The player already has an on-chain best of 50. "Best" must reflect that
+  // record (not just this session), and show even before playing.
+  await boot(page, {
+    ordering: 0,
+    player: SIGNED_IN_PLAYER,
+    bests: { [SIGNED_IN_PLAYER.toLowerCase()]: 50 },
+  });
+  // Shows the on-chain best before any play this session.
+  await expect(page.getByText("Best: 50", { exact: false })).toBeVisible();
+  // A lower session score updates Last but never lowers the displayed Best.
+  await forceGameOver(page, 30);
+  await expect(page.getByText("Last: 30", { exact: false })).toBeVisible();
+  await expect(page.getByText("Best: 50", { exact: false })).toBeVisible();
 });
 
 test("4. requiresAccount=true gates at launch; play is blocked until sign-in", async ({ page }) => {
@@ -165,8 +204,8 @@ test("5. guest non-improving score (known best higher, higher-is-better) → no 
   await boot(page, { ordering: 0, player: null }, 50);
   await forceGameOver(page, 30);
 
-  // No nudge (SPEC §8.3: don't pester about a score that wouldn't change standing).
-  await expect(page.getByText("Sign in to save your score")).toBeHidden();
+  // No submit offer (SPEC §8.3: don't offer to save a score below the held best).
+  await expect(page.getByRole("button", { name: "Sign in & submit best" })).toHaveCount(0);
   expect(await submits(page)).toEqual([]);
   // The stored best is untouched.
   const held = await page.evaluate((k) => window.localStorage.getItem(k), GUEST_BEST_KEY);
@@ -187,9 +226,12 @@ test("7. IN-HOST GUEST on load: nudge + a 'Sign in' action available NOW (pre ga
   page,
 }) => {
   await boot(page, { ordering: 0, player: null, inHost: true, connectsTo: CONNECTS_TO });
-  await expect(page.getByText("in the Polkadot app", { exact: false })).toBeVisible();
+  // Scope to the Play-panel status line (the Account panel also shows a sign-in
+  // prompt, which on desktop is visible at the same time).
+  const status = page.locator('[data-session="in-host-guest"]');
+  await expect(status.getByText("in the Polkadot app", { exact: false })).toBeVisible();
 
-  const signIn = page.getByRole("button", { name: "Sign in", exact: true });
+  const signIn = status.getByRole("button", { name: "Sign in", exact: true });
   await expect(signIn).toBeVisible();
   // No connect() until the user clicks (detection is prompt-free).
   expect(await page.evaluate(() => window.__ARCADE_FAKE__?.state.connectCalls)).toBe(0);
@@ -201,7 +243,8 @@ test("7. IN-HOST GUEST on load: nudge + a 'Sign in' action available NOW (pre ga
 
 test("8. STANDALONE GUEST on load: guest message, NO sign-in button", async ({ page }) => {
   await boot(page, { ordering: 0, player: null, inHost: false });
-  await expect(page.getByText("open this game in the Polkadot app", { exact: false })).toBeVisible();
+  const status = page.locator('[data-session="standalone-guest"]');
+  await expect(status.getByText("open this game in the Polkadot app", { exact: false })).toBeVisible();
   // Sign-in is unavailable standalone (connect would fail) — no button offered.
   await expect(page.getByRole("button", { name: "Sign in", exact: true })).toHaveCount(0);
 });

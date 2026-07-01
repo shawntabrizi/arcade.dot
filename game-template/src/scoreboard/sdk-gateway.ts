@@ -1,7 +1,6 @@
 import { AccountId, type PolkadotSigner } from "polkadot-api";
 import {
   createAccountsProvider,
-  hostApi,
   requestPermission,
   sandboxTransport,
   type ProductAccount,
@@ -13,7 +12,7 @@ import type { ScoreEntry, ScoreOrdering } from "./api";
 import type { ChainGateway, SessionInfo } from "./gateway";
 import { resolveProductIdentifier } from "./identifier";
 import { contractScoreboard } from "./reads";
-import { gcsContract, gcsQuery, getClient, inkSdkBest, READ_ORIGIN } from "./gcs";
+import { gcsContract, getClient, inkSdkBest, READ_ORIGIN } from "./gcs";
 
 // The ONE module that wires the real host integration. Everything else depends
 // only on the ChainGateway seam (gateway.ts).
@@ -88,7 +87,6 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
   let lastError: string | null = null;
   let orderingCache: ScoreOrdering | null = null;
   let chainSubmitGranted = false;
-  let contractAllowanceGranted = false;
   let mapped = false;
   const listeners = new Set<() => void>();
 
@@ -181,9 +179,16 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
 
   async function readOrdering(): Promise<ScoreOrdering> {
     if (orderingCache !== null) return orderingCache;
-    // Default to higher-is-better if unreachable; immutable per SPEC §4.2 so
-    // caching is safe. Read via gcs.ts's ReviveApi.call path (not trace_call).
-    const o = (await gcsQuery<number>("scoreOrdering", {}, READ_ORIGIN)) ?? 0;
+    const contract = gcsContract();
+    // Default to higher-is-better if the contract isn't reachable; the value is
+    // immutable per SPEC §4.2 so caching is safe.
+    const o = contract
+      ? await contract
+          .query("scoreOrdering", { origin: READ_ORIGIN, data: {} })
+          .then((r: { success: boolean; value?: { response: number } }) =>
+            r.success ? r.value!.response : 0,
+          )
+      : 0;
     orderingCache = (o === 1 ? 1 : 0) as ScoreOrdering;
     return orderingCache;
   }
@@ -213,37 +218,76 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
     }
   }
 
-  // RFC-0010 PGAS: ask the host to sponsor gas + storage deposit for the contract
-  // call via a SmartContractAllowance, so the per-app product account doesn't
-  // have to be manually funded. Without this, a player's first submitScore reverts
-  // `Revive::StorageDepositNotEnoughFunds` (the fresh product account has no PAS).
-  // The proven dApp-factory template requests this before every write. Lazy +
-  // cached (one phone approval per session); non-fatal — in dev/standalone, or if
-  // the host declines, we still attempt the submit and surface any real failure.
-  async function ensureContractAllowance(): Promise<void> {
-    if (contractAllowanceGranted) return;
-    if (!sandboxTransport.isCorrectEnvironment()) return; // no host to sponsor
-    try {
-      const result = await hostApi.requestResourceAllocation({
-        tag: "v1",
-        value: [{ tag: "SmartContractAllowance", value: derivationIndex }],
-      });
-      // ok payload mirrors the request: { tag: "v1", value: outcome[] } where
-      // outcome[0].tag is "Allocated" | "Rejected" | "NotAvailable".
-      if (result.isOk?.()) {
-        const outcomes = (result.value as { value?: { tag?: string }[] } | undefined)?.value;
-        if (Array.isArray(outcomes) && outcomes[0]?.tag === "Allocated") {
-          contractAllowanceGranted = true;
-        }
-      }
-    } catch {
-      // Allocation unavailable (dev/transport) — proceed; the submit surfaces
-      // any real funding/authorization failure.
-    }
-  }
-
   return {
     scoreOrdering: readOrdering,
+
+    async accountDetails() {
+      if (!connected) return null;
+      const api = reviveApi();
+      let free = 0n;
+      let reserved = 0n;
+      try {
+        const acct = await api.query.System.Account.getValue(connected.ss58);
+        free = acct?.data?.free ?? 0n;
+        reserved = acct?.data?.reserved ?? 0n;
+      } catch {
+        /* leave zeros — balance read is best-effort, never blocks the tab */
+      }
+      try {
+        mapped = await inkSdkBest().addressIsMapped(connected.ss58);
+      } catch {
+        /* keep the last-known mapping flag */
+      }
+      let decimals = 10;
+      let symbol = "PAS";
+      try {
+        const spec = await getClient().getChainSpecData();
+        const props = (spec?.properties ?? {}) as {
+          tokenDecimals?: number | number[];
+          tokenSymbol?: string | string[];
+        };
+        const d = Array.isArray(props.tokenDecimals) ? props.tokenDecimals[0] : props.tokenDecimals;
+        const s = Array.isArray(props.tokenSymbol) ? props.tokenSymbol[0] : props.tokenSymbol;
+        if (typeof d === "number") decimals = d;
+        if (typeof s === "string" && s) symbol = s;
+      } catch {
+        /* fall back to PAS / 10 decimals */
+      }
+      return {
+        identifier,
+        derivationIndex,
+        ss58: connected.ss58,
+        h160: connected.h160,
+        free,
+        reserved,
+        mapped,
+        decimals,
+        symbol,
+      };
+    },
+
+    async mapAccount() {
+      if (!connected) throw new Error("Sign in before mapping your account.");
+      if (await inkSdkBest().addressIsMapped(connected.ss58)) {
+        mapped = true;
+        return;
+      }
+      await ensureChainSubmit();
+      const result = await batchSubmitAndWatch(
+        [reviveApi().tx.Revive.map_account()],
+        reviveApi(),
+        connected.signer,
+        { mode: "batch_all", waitFor: "best-block" },
+      );
+      if (!result.ok) {
+        throw new Error(
+          `map_account reverted: ${JSON.stringify(result.dispatchError, (_k: string, v: unknown) =>
+            typeof v === "bigint" ? v.toString() : v,
+          )}`,
+        );
+      }
+      mapped = true;
+    },
 
     currentPlayer() {
       return connected?.h160 ?? null;
@@ -303,69 +347,71 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
     async submitScore(score) {
       if (!connected) throw new Error("Sign in before submitting a score.");
       await ensureChainSubmit();
-      // PGAS sponsorship so the fresh per-app product account need not be funded
-      // (else the deposit can't be paid → StorageDepositNotEnoughFunds).
-      await ensureContractAllowance();
       const contract = gcsContract();
       if (!contract) throw new Error("GCS contract is not deployed (missing from cdm.json).");
 
       // pallet_revive requires the SS58 origin to be mapped before a contract
       // call (else AccountUnmapped). Each game uses its OWN per-app product
-      // account, so a player's FIRST save for a game is always unmapped. We
-      // therefore DON'T depend on a successful dry-run for limits: an unmapped
-      // origin reverts AccountUnmapped, and an unfunded one reverts
-      // StorageDepositNotEnoughFunds — both before any estimate. Instead we send
-      // with explicit, generous limits (the same fallback the dApp-factory
-      // known-good template uses) and let the PGAS-sponsored, player-signed batch
-      // do the real work. map_account runs first in the batch so submitScore then
-      // executes as the now-mapped player.
+      // account, so a player's FIRST save for a game is always unmapped — and a
+      // dry-run as that unmapped origin reverts AccountUnmapped *before* the
+      // batch below could map it. So check mapping FIRST, and when unmapped run
+      // the dry-run as a KNOWN-MAPPED origin (READ_ORIGIN = pallet-revive's
+      // pallet account) purely to obtain gas + storage-deposit limits.
+      // submitScore's cost is caller-agnostic (the on-chain caller is the
+      // extrinsic signer, not the dry-run origin), so the limits are valid; the
+      // real submit is signed by the player inside the batch.
       const sdk = inkSdkBest();
       if (!mapped) mapped = await sdk.addressIsMapped(connected.ss58);
+      const dryOrigin = mapped ? connected.ss58 : READ_ORIGIN;
 
-      const scoreCall = contract.send("submitScore", {
+      const dry = await contract.query("submitScore", {
+        origin: dryOrigin,
         data: { score: BigInt(score) },
-        gasLimit: { ref_time: 50_000_000_000n, proof_size: 2_000_000n },
-        storageDepositLimit: 10_000_000_000n,
       });
+      if (!dry.success) {
+        throw new Error(
+          `submitScore dry-run failed: ${JSON.stringify(dry.value, (_k: string, v: unknown) =>
+            typeof v === "bigint" ? v.toString() : v,
+          )}`,
+        );
+      }
 
       // ONE host approval: when unmapped, batch map_account + the contract call
-      // into a single batch_all extrinsic so the player signs ONCE.
+      // into a single batch_all extrinsic so the player signs ONCE. batch_all
+      // runs map_account first, so submitScore then executes as the now-mapped
+      // player. Once mapped, submit the call alone.
       const calls: BatchableCall[] = [];
       if (!mapped) calls.push(reviveApi().tx.Revive.map_account());
-      calls.push(scoreCall);
+      calls.push(dry.value.send());
 
       const result = await batchSubmitAndWatch(calls, reviveApi(), connected.signer, {
         mode: "batch_all",
         waitFor: "best-block",
       });
       if (!result.ok) {
-        throw new Error(
-          `submitScore reverted: ${JSON.stringify(result.dispatchError, (_k: string, v: unknown) =>
-            typeof v === "bigint" ? v.toString() : v,
-          )}`,
-        );
+        throw new Error(`submitScore reverted: ${JSON.stringify(result.dispatchError)}`);
       }
       mapped = true; // a successful batch leaves the account mapped on-chain
     },
 
     async getLeaderboard(offset, limit) {
-      // Public getter — caller-agnostic, so read as the known-mapped READ_ORIGIN
-      // (a signed-in-but-unmapped player would revert AccountUnmapped).
-      const rows = await gcsQuery<{ player: `0x${string}`; score: bigint; at: bigint }[]>(
-        "getLeaderboard",
-        { offset, limit },
-        READ_ORIGIN,
-      );
-      return toEntries(rows);
+      const contract = gcsContract();
+      if (!contract) return [];
+      const r = await contract.query("getLeaderboard", {
+        origin: connected?.ss58 ?? READ_ORIGIN,
+        data: { offset, limit },
+      });
+      return r.success ? toEntries(r.value.response) : [];
     },
 
     async getRecent(offset, limit) {
-      const rows = await gcsQuery<{ player: `0x${string}`; score: bigint; at: bigint }[]>(
-        "getRecent",
-        { offset, limit },
-        READ_ORIGIN,
-      );
-      return toEntries(rows);
+      const contract = gcsContract();
+      if (!contract) return [];
+      const r = await contract.query("getRecent", {
+        origin: connected?.ss58 ?? READ_ORIGIN,
+        data: { offset, limit },
+      });
+      return r.success ? toEntries(r.value.response) : [];
     },
 
     async getBest(player) {

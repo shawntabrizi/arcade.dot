@@ -4,6 +4,7 @@ import type { ChainGateway, GuestStore } from "../../src/scoreboard/gateway";
 import {
   Scoreboard,
   isWorthKeeping,
+  pickBetter,
   readGuestBest,
   writeGuestBest,
 } from "../../src/scoreboard/scoreboard";
@@ -104,6 +105,59 @@ describe("isWorthKeeping (SPEC §4.2 scoreOrdering)", () => {
     expect(isWorthKeeping(9, 10, 1)).toBe(true);
     expect(isWorthKeeping(10, 10, 1)).toBe(false);
     expect(isWorthKeeping(11, 10, 1)).toBe(false);
+  });
+});
+
+describe("pickBetter (running session best)", () => {
+  it("returns the non-null score when one side is null", () => {
+    expect(pickBetter(null, 5, 0)).toBe(5);
+    expect(pickBetter(5, null, 0)).toBe(5);
+    expect(pickBetter(null, null, 0)).toBeNull();
+  });
+  it("higher-is-better (0): keeps the larger", () => {
+    expect(pickBetter(5, 8, 0)).toBe(8);
+    expect(pickBetter(8, 5, 0)).toBe(8);
+  });
+  it("lower-is-better (1): keeps the smaller", () => {
+    expect(pickBetter(5, 8, 1)).toBe(5);
+    expect(pickBetter(8, 5, 1)).toBe(5);
+  });
+});
+
+describe("held best is the monotonic SESSION best (submit-your-best)", () => {
+  // Regression guard: a signed-in player reads their on-chain best ONCE per
+  // round, so without comparing against the held best, a replay that beats the
+  // chain best but is worse than an earlier session round would lower `held` —
+  // submitting a worse score than the player actually achieved this session.
+  it("signed-in: replaying worse-but-still-above-chain never lowers the held best", async () => {
+    const player = "0x00000000000000000000000000000000000000bb" as `0x${string}`;
+    const { gateway, state } = fakeGateway({ ordering: 0, player }); // no chain best yet
+    const sb = new Scoreboard(gateway, new FakeStore(), { gameKey: GAME_KEY });
+
+    expect((await sb.onGameEnd(12)).kind).toBe("confirm");
+    expect(sb.heldScore()).toBe(12);
+    // A worse round (11) still beats the (null) chain best, but must NOT replace 12.
+    expect((await sb.onGameEnd(11)).kind).toBe("ignored");
+    expect(sb.heldScore()).toBe(12);
+    // A better round (15) does become the new held best.
+    expect((await sb.onGameEnd(15)).kind).toBe("confirm");
+    expect(sb.heldScore()).toBe(15);
+
+    await sb.saveHeldScore();
+    expect(state.submits).toEqual([15]); // the session BEST, not the last round
+  });
+
+  it("lower-is-better: held keeps the smallest across replays", async () => {
+    const player = "0x00000000000000000000000000000000000000cc" as `0x${string}`;
+    const { gateway, state } = fakeGateway({ ordering: 1, player });
+    const sb = new Scoreboard(gateway, new FakeStore(), { gameKey: GAME_KEY });
+    await sb.onGameEnd(5);
+    await sb.onGameEnd(7); // worse (higher) → ignored
+    expect(sb.heldScore()).toBe(5);
+    await sb.onGameEnd(3); // better (lower)
+    expect(sb.heldScore()).toBe(3);
+    await sb.saveHeldScore();
+    expect(state.submits).toEqual([3]);
   });
 });
 

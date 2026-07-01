@@ -82,6 +82,20 @@ body {
   display: none;
 }
 
+/* The desktop-only right-column tab strip; hidden on mobile (the bottom tab bar
+   switches panels there). The desktop media query flips it to flex. */
+.desktop-tabs {
+  display: none;
+}
+
+/* Right-column wrapper. On mobile it's transparent (display: contents) so the
+   boards/account remain full-screen absolute panels toggled by the bottom bar.
+   The desktop media query makes it the flex column that holds the tab strip +
+   the active panel. */
+.right-col {
+  display: contents;
+}
+
 /* The Play panel never scrolls; the game is centered and self-scaling. */
 .panel-play {
   overflow: hidden;
@@ -287,8 +301,8 @@ body {
     display: flex;
   }
 
-  /* Game in the left column; both boards stack in the right column (the mobile
-     board-mode-* hide rules are overridden below so both cards show). */
+  /* Game always in the left column. The right column is a single flex cell
+     (.right-col) holding the tab strip + the active panel, top-aligned. */
   .panel-play {
     overflow: visible;
     padding: 0;
@@ -297,11 +311,55 @@ body {
     grid-column: 1;
   }
 
-  .panel-boards {
+  .right-col {
+    display: flex;
+    flex-direction: column;
     grid-column: 2;
+    min-width: 0;
   }
 
-  .panel-boards > div {
+  /* Desktop right-column tab strip (Scoreboard / Account). */
+  .desktop-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--border-divider);
+    margin-bottom: 16px;
+  }
+  .desktop-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    padding: 9px 14px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--fg-secondary);
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+  .desktop-tab:hover {
+    color: var(--fg-primary);
+  }
+  .desktop-tab[aria-selected="true"] {
+    color: var(--fg-primary);
+    border-bottom-color: var(--fg-primary);
+  }
+
+  /* Both right panels stack in .right-col; the active tab shows one at a time, so
+     Account no longer sits below the boards and off-screen. */
+  .panel-area[data-righttab="boards"] .panel-account {
+    display: none;
+  }
+  .panel-area[data-righttab="account"] .panel-boards {
+    display: none;
+  }
+
+  .panel-boards > div,
+  .panel-account > div {
     padding: 0;
     max-width: none;
   }

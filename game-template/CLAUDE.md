@@ -63,6 +63,15 @@ Rules — all load-bearing:
 4. **Guest-first, zero chain during play.** The component never connects a
    wallet, reads, or writes the chain. A guest plays freely; the template
    handles the sign-in nudge at game over. Don't add login or storage.
+5. **No external network dependencies — bundle EVERYTHING.** The app must make
+   zero requests to external domains. Do NOT hotlink fonts (Google Fonts/CDNs),
+   scripts, images, or any asset from an external URL — inside the Polkadot
+   host that triggers an "Allow access to web domains?" prompt and breaks the
+   self-contained guarantee (and offline play). Bundle assets by `import`ing
+   them so Vite emits them locally; use packaged fonts (Inter is already
+   bundled via `@fontsource/inter` in `src/main.tsx`) and npm libraries, never a
+   `<link>`/`<script>`/`url(https://…)` to a remote host. If your game needs a
+   font/image/sound, add it to the repo and import it.
 
 To wire your game in:
 
@@ -155,7 +164,9 @@ non-points unit (moves, guesses, laps); use `0` for plain points and leave
 
 The look is **structural**, not yours to change. The template provides the
 **2:3 portrait game surface**, the **mobile/desktop layout**, the **bottom tab
-bar**, and the **game-over save sheet**. Your game component fills 100% of the
+bar** (Play · Scores · Recent · Account), the **game-over Last/Best + submit
+affordance**, and the **Account tab** (product-account derivation, address,
+balance, mapping status, and faucet). Your game component fills 100% of the
 surface and styles **only its own gameplay inside it**.
 
 - **Do not** edit `src/App.css`, `src/tokens.css`, `tailwind.config.js`, the

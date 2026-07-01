@@ -13,12 +13,14 @@ import type { Address } from "./types";
 
 export type Route =
   | { name: "home" }
+  | { name: "about" }
   | { name: "game"; address: Address };
 
 export function parseHash(hash: string): Route {
   const h = hash.replace(/^#/, "");
   const m = /^\/game\/(0x[0-9a-fA-F]{40})\/?$/i.exec(h);
   if (m) return { name: "game", address: m[1].toLowerCase() as Address };
+  if (/^\/about\/?$/.test(h)) return { name: "about" };
   return { name: "home" };
 }
 
@@ -28,6 +30,10 @@ export function gameHref(address: Address): string {
 
 export function homeHref(): string {
   return "#/";
+}
+
+export function aboutHref(): string {
+  return "#/about";
 }
 
 export function useRoute(): Route {
