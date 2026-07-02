@@ -1,14 +1,15 @@
-// Home / discovery page (SPEC §7.1): a sortable game list (left), a featured
-// hero, and the live-activity feed. Enumeration + bounded per-block refresh are
-// pure logic (logic.ts); this component fetches the conformant game list once
-// and arranges it. The Most-played / New / All-games rows were removed — the
-// left list is now the browse spine.
+// Home / discovery page (SPEC §7.1), arranged like a storefront: a sortable
+// game list spine (left), a featured hero capsule, an all-games capsule grid,
+// and the live-activity feed. Enumeration + bounded per-block refresh are pure
+// logic (logic.ts); this component fetches the conformant game list once and
+// arranges it.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useReads } from "../reads-context";
-import { mergeStats, sortByLastPlayed } from "../logic";
+import { mergeStats, sortByLastPlayed, sortByPlayCount } from "../logic";
 import { ActivityRail } from "../components/ActivityRail";
 import { FeaturedHero } from "../components/FeaturedHero";
+import { GameCapsule } from "../components/GameCapsule";
 import { GameList } from "../components/GameList";
 import type { Game } from "../types";
 
@@ -89,10 +90,18 @@ export function Home({ blockKey }: { blockKey: number }) {
       <GameList games={games} />
       <div className="home__main">
         <section className="row">
-          <h2 className="section__title">Featured</h2>
+          <h2 className="section__title">Featured &amp; recommended</h2>
           {featured && (
             <FeaturedHero key={featured.listing.address} game={featured} />
           )}
+        </section>
+        <section className="row">
+          <h2 className="section__title">All games</h2>
+          <div className="shelf">
+            {sortByPlayCount(games).map((g) => (
+              <GameCapsule key={g.listing.address} game={g} />
+            ))}
+          </div>
         </section>
         <ActivityRail games={games} refreshKey={blockKey} />
       </div>

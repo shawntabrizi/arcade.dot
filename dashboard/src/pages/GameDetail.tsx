@@ -1,12 +1,15 @@
-// Game detail page (SPEC §7.3), keyed by contract address. Hero (thumbnail,
-// name, type, short description, requiresAccount badge, Play button per §7.5),
-// stats, leaderboard (separate component), recent plays (separate component),
-// footer (contract address → explorer, registered/updated dates).
+// Game detail page (SPEC §7.3), keyed by contract address — the game's "store
+// page". The game's own art bleeds into a blurred, darkened backdrop behind
+// the hero (Steam app-page treatment). Hero (thumbnail, name, type, short
+// description, requiresAccount badge, Play button per §7.5), stats,
+// leaderboard (separate component), recent plays (separate component), footer
+// (contract address → explorer, registered/updated dates).
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { getTruApi, isInsideContainerSync } from "@parity/product-sdk-host";
 import { useReads } from "../reads-context";
 import { bucketGameType, relativeTime, toLaunchUrl } from "../logic";
+import { ambientColor } from "../placeholder";
 import { homeHref } from "../router";
 import { Thumbnail } from "../components/Thumbnail";
 import { Leaderboard } from "../components/Leaderboard";
@@ -103,14 +106,32 @@ export function GameDetail({ address, blockKey }: { address: Address; blockKey: 
   };
 
   return (
-    <article className="detail">
+    <article
+      className="detail"
+      style={{ "--ambient": ambientColor(listing.address) } as CSSProperties}
+    >
+      {/* The game's art, blurred + darkened, bleeding behind the hero. */}
+      <div className="detail__bg" aria-hidden="true">
+        <Thumbnail
+          address={listing.address}
+          cid={listing.thumbnailCid}
+          alt=""
+          name={listing.name}
+        />
+      </div>
+
       <a className="link detail__back" href={homeHref()}>
         ← Arcade
       </a>
 
       <header className="hero">
         <div className="hero__thumb">
-          <Thumbnail address={listing.address} cid={listing.thumbnailCid} alt={listing.name} />
+          <Thumbnail
+            address={listing.address}
+            cid={listing.thumbnailCid}
+            alt={listing.name}
+            name={listing.name}
+          />
         </div>
         <div className="hero__info">
           <div className="hero__titlerow">
