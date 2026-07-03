@@ -2,16 +2,20 @@
 // hero, and the live-activity feed. Enumeration + bounded per-block refresh are
 // pure logic (logic.ts); this component fetches the conformant game list once
 // and arranges it. The Most-played / New / All-games rows were removed — the
-// left list is the browse spine (filtering to be added there).
+// left list is now the browse spine.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useReads } from "../reads-context";
 import { mergeStats, sortByLastPlayed } from "../logic";
+import { ActivityRail } from "../components/ActivityRail";
 import { FeaturedHero } from "../components/FeaturedHero";
 import { GameList } from "../components/GameList";
 import type { Game } from "../types";
 
-type Load = { state: "loading" } | { state: "ok"; games: Game[] } | { state: "error"; error: string };
+type Load =
+  | { state: "loading" }
+  | { state: "ok"; games: Game[] }
+  | { state: "error"; error: string };
 
 export function Home({ blockKey }: { blockKey: number }) {
   const reads = useReads();
@@ -49,7 +53,10 @@ export function Home({ blockKey }: { blockKey: number }) {
       } catch (err) {
         // First load failed → surface; a failed refresh keeps last-good (§9.3).
         if (!cancelled && !loadedOnce.current)
-          setLoad({ state: "error", error: err instanceof Error ? err.message : String(err) });
+          setLoad({
+            state: "error",
+            error: err instanceof Error ? err.message : String(err),
+          });
       }
     })();
     return () => {
@@ -65,10 +72,16 @@ export function Home({ blockKey }: { blockKey: number }) {
     return <p className="muted page__status">Loading games…</p>;
   }
   if (load.state === "error") {
-    return <p className="error page__status">Couldn’t reach the chain: {load.error}</p>;
+    return (
+      <p className="error page__status">
+        Couldn’t reach the chain: {load.error}
+      </p>
+    );
   }
   if (games.length === 0) {
-    return <p className="muted page__status">No conforming games registered yet.</p>;
+    return (
+      <p className="muted page__status">No conforming games registered yet.</p>
+    );
   }
 
   return (
@@ -77,8 +90,11 @@ export function Home({ blockKey }: { blockKey: number }) {
       <div className="home__main">
         <section className="row">
           <h2 className="section__title">Featured</h2>
-          {featured && <FeaturedHero game={featured} />}
+          {featured && (
+            <FeaturedHero key={featured.listing.address} game={featured} />
+          )}
         </section>
+        <ActivityRail games={games} refreshKey={blockKey} />
       </div>
     </div>
   );

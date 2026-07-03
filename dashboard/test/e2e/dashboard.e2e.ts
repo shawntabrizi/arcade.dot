@@ -26,7 +26,7 @@ async function gotoHome(page: Page) {
   await expect(page.locator(".gamelist__row").first()).toBeVisible();
 }
 
-test.describe("Home — game list, featured hero, conformance gate", () => {
+test.describe("Home — game list, featured hero, activity, conformance gate", () => {
   test("lists the conformant games and hides the non-conformant ghost (§7.4)", async ({
     page,
   }) => {
@@ -34,18 +34,49 @@ test.describe("Home — game list, featured hero, conformance gate", () => {
 
     // The three conformant games appear by name in the left list.
     for (const name of ["Snake", "Time Trial", "Lap Battle"]) {
-      await expect(page.locator(".gamelist__name", { hasText: name })).toBeVisible();
+      await expect(
+        page.locator(".gamelist__name", { hasText: name }),
+      ).toBeVisible();
     }
 
     // The ghost listing (registered but non-conformant) is filtered out — it
     // never appears despite its huge playCount, which would otherwise top the list.
-    await expect(page.locator(".gamelist__name", { hasText: "Ghost" })).toHaveCount(0);
+    await expect(
+      page.locator(".gamelist__name", { hasText: "Ghost" }),
+    ).toHaveCount(0);
     await expect(page.getByText("999,999")).toHaveCount(0);
   });
 
-  test("featured hero is the most-recently-active game (§7.1)", async ({ page }) => {
+  test("featured hero is the most-recently-active game (§7.1)", async ({
+    page,
+  }) => {
     await gotoHome(page);
     // Featured = lastPlayedAt desc → Snake (NOW-60) is the hero.
+    await expect(page.locator(".feature__name")).toHaveText("Snake");
+  });
+
+  test("live activity shows recent-play rows merged from the fixtures (§7.1 item 5)", async ({
+    page,
+  }) => {
+    await gotoHome(page);
+
+    const rail = page.locator(".rail");
+    await expect(rail.locator(".section__title")).toHaveText("Live activity");
+
+    const rows = rail.locator(".rail__row");
+    await expect(rows.first()).toBeVisible();
+    expect(await rows.count()).toBeGreaterThanOrEqual(3);
+    await expect(rail.getByText("alice").first()).toBeVisible();
+  });
+
+  test("mobile still exposes the game browser", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await gotoHome(page);
+
+    await expect(page.locator(".gamelist")).toBeVisible();
+    await expect(
+      page.locator(".gamelist__name", { hasText: "Snake" }),
+    ).toBeVisible();
     await expect(page.locator(".feature__name")).toHaveText("Snake");
   });
 
@@ -65,7 +96,9 @@ test.describe("Home — game list, featured hero, conformance gate", () => {
     await expect(names.first()).toHaveText("Lap Battle");
   });
 
-  test("the game list filters by category chip and name search (§5.4)", async ({ page }) => {
+  test("the game list filters by category chip and name search (§5.4)", async ({
+    page,
+  }) => {
     await gotoHome(page);
     const names = page.locator(".gamelist__name");
     const chips = page.locator(".gamelist__chip");
@@ -94,7 +127,7 @@ test.describe("Home — game list, featured hero, conformance gate", () => {
 });
 
 test.describe("Detail — hero, Play button, name resolution, score formats (§7.3, §7.5, §8.2)", () => {
-  test("Snake (points format): hero, integer scores, mapped + truncated names, Play link", async ({
+  test("Snake (points format): hero, integer scores, mapped + anonymous names, Play link", async ({
     page,
   }) => {
     // Navigate by direct hash deep-link.
@@ -115,7 +148,9 @@ test.describe("Detail — hero, Play button, name resolution, score formats (§7
     await expect(board.nth(0).locator(".board__player")).toHaveText("alice");
     await expect(board.nth(0).locator(".board__score")).toHaveText("9001");
     // Unmapped player is abstracted to a friendly alias — never the raw address.
-    await expect(board.nth(1).locator(".board__player")).not.toContainText("0x");
+    await expect(board.nth(1).locator(".board__player")).not.toContainText(
+      "0x",
+    );
     await expect(board.nth(1).locator(".board__score")).toHaveText("880");
 
     // Recent plays section is present and populated.
@@ -131,7 +166,9 @@ test.describe("Detail — hero, Play button, name resolution, score formats (§7
     await expect(play).toHaveAttribute("href", "https://arcade-snake.paseo.li");
   });
 
-  test("Time Trial (duration format): score renders m:ss.mmm", async ({ page }) => {
+  test("Time Trial (duration format): score renders m:ss.mmm", async ({
+    page,
+  }) => {
     await page.goto(`/#/game/${A2}`);
     await expect(page.locator(".hero__name")).toHaveText("Time Trial");
     // 83456 ms → 1:23.456 ; 605000 ms → 10:05.000 (§4.2 scoreFormat 1).
@@ -145,19 +182,27 @@ test.describe("Detail — hero, Play button, name resolution, score formats (§7
     );
   });
 
-  test("Lap Battle (custom unit): score renders value + unit", async ({ page }) => {
+  test("Lap Battle (custom unit): score renders value + unit", async ({
+    page,
+  }) => {
     await page.goto(`/#/game/${A3}`);
     await expect(page.locator(".hero__name")).toHaveText("Lap Battle");
     // 42 with unit "laps" → "42 laps" (§4.2 scoreFormat 2).
-    await expect(page.locator(".board__list .board__score").first()).toHaveText("42 laps");
+    await expect(page.locator(".board__list .board__score").first()).toHaveText(
+      "42 laps",
+    );
     // requiresAccount listing shows the badge.
     await expect(page.locator(".badge--account")).toBeVisible();
   });
 
-  test("navigating from the game list opens the matching detail page", async ({ page }) => {
+  test("navigating from the game list opens the matching detail page", async ({
+    page,
+  }) => {
     await gotoHome(page);
     await page
-      .locator(".gamelist__row", { has: page.locator(".gamelist__name", { hasText: "Snake" }) })
+      .locator(".gamelist__row", {
+        has: page.locator(".gamelist__name", { hasText: "Snake" }),
+      })
       .first()
       .click();
     await expect(page.locator(".hero__name")).toHaveText("Snake");

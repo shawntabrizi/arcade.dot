@@ -25,7 +25,12 @@
   --shadow-lift: 0 14px 36px rgba(0, 0, 0, 0.5);
   --focus-ring: #e8e8ea;
   color-scheme: dark;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
 }
 
 * {
@@ -174,10 +179,9 @@ a {
   .home {
     grid-template-columns: 1fr;
   }
-  /* the sortable list is a desktop aid for now (follow-up: off-canvas drawer);
-     the featured hero + activity carry the mobile view */
   .gamelist {
-    display: none;
+    position: static;
+    top: auto;
   }
 }
 
@@ -189,7 +193,9 @@ a {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
-  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+  transition:
+    border-color 0.14s ease,
+    box-shadow 0.14s ease;
 }
 .feature:hover {
   border-color: var(--border-strong);
@@ -209,7 +215,9 @@ a {
   display: block;
   /* monochrome treatment so a colourful thumbnail stays on-palette */
   filter: grayscale(1) contrast(1.02);
-  transition: transform 0.5s ease, filter 0.3s ease;
+  transition:
+    transform 0.5s ease,
+    filter 0.3s ease;
 }
 .feature:hover .feature__media img {
   transform: scale(1.04);
@@ -366,7 +374,9 @@ a {
   padding: 5px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.1s ease, border-color 0.1s ease;
+  transition:
+    background 0.1s ease,
+    border-color 0.1s ease;
 }
 .gamelist__sort:hover {
   background: var(--surface-3);
@@ -408,7 +418,10 @@ a {
   padding: 4px 10px;
   border-radius: 999px;
   cursor: pointer;
-  transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+  transition:
+    background 0.1s ease,
+    color 0.1s ease,
+    border-color 0.1s ease;
 }
 .gamelist__chip:hover {
   color: var(--fg);

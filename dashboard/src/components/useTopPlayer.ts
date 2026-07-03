@@ -14,15 +14,17 @@ export function useTopPlayer(game: Game): string | null {
   const playCount = game.stats.playCount;
   useEffect(() => {
     let cancelled = false;
+    setName(null);
     (async () => {
-      const top = await reads.getLeaderboard(address, 0, 1);
-      if (cancelled) return;
-      if (top.length === 0) {
-        setName(null);
-        return;
+      try {
+        const top = await reads.getLeaderboard(address, 0, 1);
+        if (cancelled) return;
+        if (top.length === 0) return;
+        const n = await reads.resolveName(top[0].player);
+        if (!cancelled) setName(displayName(top[0].player, n));
+      } catch {
+        if (!cancelled) setName(null);
       }
-      const n = await reads.resolveName(top[0].player);
-      if (!cancelled) setName(displayName(top[0].player, n));
     })();
     return () => {
       cancelled = true;

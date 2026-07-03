@@ -27,9 +27,7 @@ export function isConformant(arcadeVersion: number | null): boolean {
 
 // Featured (item 1) + the basis for the activity-rail set: most recently active.
 export function sortByLastPlayed(games: Game[]): Game[] {
-  return [...games].sort(
-    (a, b) => b.stats.lastPlayedAt - a.stats.lastPlayedAt,
-  );
+  return [...games].sort((a, b) => b.stats.lastPlayedAt - a.stats.lastPlayedAt);
 }
 
 // Most Played (item 2): all-time playCount desc.
@@ -77,10 +75,7 @@ export function presentChips(games: Game[]): GameTypeChip[] {
 }
 
 // Filter games by a selected chip; null/"all" means no filter.
-export function filterByChip(
-  games: Game[],
-  chip: GameTypeChip | null,
-): Game[] {
+export function filterByChip(games: Game[], chip: GameTypeChip | null): Game[] {
   if (chip === null) return games;
   return games.filter((g) => bucketGameType(g.listing.gameType) === chip);
 }
@@ -131,7 +126,9 @@ export function mergeActivity(
   }
   // Newest-first; stable tie-break keeps multiple plays at the same second in a
   // deterministic order (by game address) so the feed doesn't jitter.
-  items.sort((a, b) => b.at - a.at || (a.game < b.game ? -1 : a.game > b.game ? 1 : 0));
+  items.sort(
+    (a, b) => b.at - a.at || (a.game < b.game ? -1 : a.game > b.game ? 1 : 0),
+  );
   return items.slice(0, feedLimit);
 }
 
@@ -257,12 +254,40 @@ export function shortAddress(address: string): string {
 // ever showing hex. (Collisions are possible across a very large player set;
 // players who set a DotNS name always show their real username instead.)
 const ALIAS_ADJECTIVES = [
-  "Swift", "Calm", "Bold", "Brave", "Quiet", "Clever", "Lucky", "Keen",
-  "Mellow", "Noble", "Sly", "Witty", "Spry", "Jolly", "Bright", "Stoic",
+  "Swift",
+  "Calm",
+  "Bold",
+  "Brave",
+  "Quiet",
+  "Clever",
+  "Lucky",
+  "Keen",
+  "Mellow",
+  "Noble",
+  "Sly",
+  "Witty",
+  "Spry",
+  "Jolly",
+  "Bright",
+  "Stoic",
 ];
 const ALIAS_ANIMALS = [
-  "Otter", "Falcon", "Lynx", "Heron", "Fox", "Ibex", "Koi", "Raven",
-  "Mole", "Wren", "Seal", "Hare", "Newt", "Crane", "Vole", "Tern",
+  "Otter",
+  "Falcon",
+  "Lynx",
+  "Heron",
+  "Fox",
+  "Ibex",
+  "Koi",
+  "Raven",
+  "Mole",
+  "Wren",
+  "Seal",
+  "Hare",
+  "Newt",
+  "Crane",
+  "Vole",
+  "Tern",
 ];
 
 export function anonAlias(address: string): string {
@@ -270,8 +295,16 @@ export function anonAlias(address: string): string {
   let h = 0;
   for (let i = 0; i < hex.length; i++) h = (h * 31 + hex.charCodeAt(i)) >>> 0;
   const adj = ALIAS_ADJECTIVES[h % ALIAS_ADJECTIVES.length];
-  const animal = ALIAS_ANIMALS[Math.floor(h / ALIAS_ADJECTIVES.length) % ALIAS_ANIMALS.length];
-  return `${adj} ${animal}`;
+  const animal =
+    ALIAS_ANIMALS[
+      Math.floor(h / ALIAS_ADJECTIVES.length) % ALIAS_ANIMALS.length
+    ];
+  const suffix = (h >>> 8)
+    .toString(36)
+    .toUpperCase()
+    .padStart(4, "0")
+    .slice(-4);
+  return `${adj} ${animal} #${suffix}`;
 }
 
 // Format a player for display. `resolved` is the resolveName output (a DotNS

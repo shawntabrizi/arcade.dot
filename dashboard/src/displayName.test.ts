@@ -35,10 +35,19 @@ describe("anonAlias", () => {
   it("is deterministic per address and contains no hex", () => {
     expect(anonAlias(A)).toBe(anonAlias(A));
     expect(anonAlias(A)).not.toContain("0x");
-    expect(anonAlias(A)).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
+    expect(anonAlias(A)).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+ #[0-9A-Z]{4}$/);
   });
 
   it("differs across distinct addresses", () => {
     expect(anonAlias(A)).not.toBe(anonAlias(B));
+  });
+
+  it("keeps the deterministic suffix distinct for nearby hash collisions", () => {
+    const C = "0x0000000000000000000000000000000000000001" as Address;
+    const D = "0x0000000000000000000000000000000000000089" as Address;
+    expect(anonAlias(C).replace(/ #[0-9A-Z]{4}$/, "")).toBe(
+      anonAlias(D).replace(/ #[0-9A-Z]{4}$/, ""),
+    );
+    expect(anonAlias(C)).not.toBe(anonAlias(D));
   });
 });
