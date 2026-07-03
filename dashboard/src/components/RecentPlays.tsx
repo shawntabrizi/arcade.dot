@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { useReads } from "../reads-context";
-import { formatScore, relativeTime, shortAddress } from "../logic";
+import { displayName, formatScore, relativeTime } from "../logic";
 import { useResolvedNames } from "./useResolvedNames";
 import { useNow } from "./useNow";
 import type { Address, ScoreConfig, ScoreEntry } from "../types";
@@ -50,15 +50,18 @@ export function RecentPlays({
         <p className="muted">No plays yet.</p>
       ) : (
         <ul className="recent__list">
-          {entries.map((e, i) => (
-            <li key={`${e.player}-${e.at}-${i}`} className="recent__row">
-              <span className="recent__player" title={e.player}>
-                {names.get(e.player) ?? shortAddress(e.player)}
-              </span>
-              <span className="recent__score">{formatScore(e.score, config)}</span>
-              <span className="recent__time muted">{relativeTime(e.at, now)}</span>
-            </li>
-          ))}
+          {entries.map((e, i) => {
+            const label = displayName(e.player, names.get(e.player));
+            return (
+              <li key={`${e.player}-${e.at}-${i}`} className="recent__row">
+                <span className="recent__player" title={label}>
+                  {label}
+                </span>
+                <span className="recent__score">{formatScore(e.score, config)}</span>
+                <span className="recent__time muted">{relativeTime(e.at, now)}</span>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

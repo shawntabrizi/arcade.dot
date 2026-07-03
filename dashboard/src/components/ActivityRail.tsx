@@ -1,15 +1,14 @@
 // Live activity rail (SPEC §7.1 item 5): a merged feed of recent plays across
-// games, built from a BOUNDED merge — getRecent from at most the 10
+// games, built from a bounded merge — getRecent from at most the 10
 // most-recently-active games (logic.activityGameSet / mergeActivity). Separate
-// component from the leaderboard (SPEC §4.5). Item 13 finalizes per-block
-// refresh + graceful degradation; this implements the bounded-merge fetch and
-// renders it, refreshing when its `refreshKey` changes.
+// component from the leaderboard (SPEC §4.5).
 
 import { useEffect, useState } from "react";
 import { useReads } from "../reads-context";
 import {
   ACTIVITY_FEED_LIMIT,
   activityGameSet,
+  displayName,
   mergeActivity,
   relativeTime,
   shortAddress,
@@ -46,33 +45,40 @@ export function ActivityRail({
       await Promise.all(
         set.map(async (addr) => {
           try {
-            perGame.set(addr, await reads.getRecent(addr, 0, ACTIVITY_FEED_LIMIT));
+            perGame.set(
+              addr,
+              await reads.getRecent(addr, 0, ACTIVITY_FEED_LIMIT),
+            );
           } catch {
             perGame.set(addr, []);
           }
         }),
       );
       if (cancelled) return;
+
       const merged = mergeActivity(perGame, nameByAddr);
-      // If this refresh yielded nothing but we already have last-good rows, keep
-      // them (§9.3: never blank a populated rail on a stalled refresh).
-      if (merged.length === 0 && items.length > 0) return;
-      // Resolve player names for the merged feed; a failed resolve falls back to
-      // the truncated address (resolveName already swallows errors).
-      let playerNames: string[] = [];
-      try {
-        playerNames = await Promise.all(merged.map((m) => reads.resolveName(m.player)));
-      } catch {
-        playerNames = merged.map((m) => shortAddress(m.player));
-      }
+      const playerNames = await Promise.all(
+        merged.map(async (m) => {
+          try {
+            return displayName(m.player, await reads.resolveName(m.player));
+          } catch {
+            return displayName(m.player);
+          }
+        }),
+      );
       if (cancelled) return;
-      setItems(merged.map((m, i) => ({ ...m, playerName: playerNames[i] })));
+
+      setItems((prev) => {
+        // If this refresh yielded nothing but we already have last-good rows,
+        // keep them (§9.3: never blank a populated rail on a stalled refresh).
+        if (merged.length === 0 && prev.length > 0) return prev;
+        return merged.map((m, i) => ({ ...m, playerName: playerNames[i] }));
+      });
       setLoaded(true);
     })();
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reads, games, refreshKey]);
 
   return (
@@ -84,17 +90,25 @@ export function ActivityRail({
         <p className="muted">No recent plays yet.</p>
       ) : (
         <ul className="rail__list">
-          {items.map((it, i) => (
-            <li key={`${it.game}-${it.player}-${it.at}-${i}`} className="rail__row">
-              <span className="rail__player" title={it.player}>
-                {it.playerName ?? shortAddress(it.player)}
-              </span>
-              <a className="rail__game" href={gameHref(it.game)}>
-                {it.gameName || shortAddress(it.game)}
-              </a>
-              <span className="rail__time muted">{relativeTime(it.at, now)}</span>
-            </li>
-          ))}
+          {items.map((it, i) => {
+            const player = it.playerName ?? displayName(it.player);
+            return (
+              <li
+                key={`${it.game}-${it.player}-${it.at}-${i}`}
+                className="rail__row"
+              >
+                <span className="rail__player" title={player}>
+                  {player}
+                </span>
+                <a className="rail__game" href={gameHref(it.game)}>
+                  {it.gameName || shortAddress(it.game)}
+                </a>
+                <span className="rail__time muted">
+                  {relativeTime(it.at, now)}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
     </aside>

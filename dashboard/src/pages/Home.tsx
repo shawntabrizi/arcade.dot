@@ -1,29 +1,25 @@
-// Home / discovery page (SPEC §7.1): Featured row, Most Played, New, the
-// all-games grid with gameType filter chips, and the live-activity rail.
-// All sorting/bucketing is pure logic (logic.ts); this component just fetches
-// the conformant game list once and arranges it.
+// Home / discovery page (SPEC §7.1): a sortable game list (left), a featured
+// hero, and the live-activity feed. Enumeration + bounded per-block refresh are
+// pure logic (logic.ts); this component fetches the conformant game list once
+// and arranges it. The Most-played / New / All-games rows were removed — the
+// left list is now the browse spine.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useReads } from "../reads-context";
-import {
-  filterByChip,
-  mergeStats,
-  presentChips,
-  sortByLastPlayed,
-  sortByPlayCount,
-  sortByRegisteredAt,
-  type GameTypeChip,
-} from "../logic";
-import { GameCard } from "../components/GameCard";
+import { mergeStats, sortByLastPlayed } from "../logic";
 import { ActivityRail } from "../components/ActivityRail";
+import { FeaturedHero } from "../components/FeaturedHero";
+import { GameList } from "../components/GameList";
 import type { Game } from "../types";
 
-type Load = { state: "loading" } | { state: "ok"; games: Game[] } | { state: "error"; error: string };
+type Load =
+  | { state: "loading" }
+  | { state: "ok"; games: Game[] }
+  | { state: "error"; error: string };
 
 export function Home({ blockKey }: { blockKey: number }) {
   const reads = useReads();
   const [load, setLoad] = useState<Load>({ state: "loading" });
-  const [chip, setChip] = useState<GameTypeChip | null>(null);
   // Whether the registry has been enumerated this session. The first render
   // enumerates once (listGames, §7.4); every later best-block tick refreshes
   // ONLY the visible games' stats (refreshGames) — never re-enumerates.
@@ -47,7 +43,7 @@ export function Home({ blockKey }: { blockKey: number }) {
           return;
         }
         // Bounded per-block refresh (§7.4): re-read ONLY the games we're showing
-        // (all currently-listed games on home) — O(visible), no re-enumeration.
+        // — O(visible), no re-enumeration.
         const addrs = gamesRef.current.map((g) => g.listing.address);
         const refreshed = await reads.refreshGames(addrs);
         if (cancelled) return;
@@ -55,10 +51,12 @@ export function Home({ blockKey }: { blockKey: number }) {
         gamesRef.current = merged;
         setLoad({ state: "ok", games: merged });
       } catch (err) {
-        // First load failed → surface; a failed refresh keeps last-good (§9.3):
-        // gamesRef/load are untouched, so the page never blanks mid-demo.
+        // First load failed → surface; a failed refresh keeps last-good (§9.3).
         if (!cancelled && !loadedOnce.current)
-          setLoad({ state: "error", error: err instanceof Error ? err.message : String(err) });
+          setLoad({
+            state: "error",
+            error: err instanceof Error ? err.message : String(err),
+          });
       }
     })();
     return () => {
@@ -67,11 +65,8 @@ export function Home({ blockKey }: { blockKey: number }) {
   }, [reads, blockKey]);
 
   const games = load.state === "ok" ? load.games : [];
-  const featured = useMemo(() => sortByLastPlayed(games).slice(0, 4), [games]);
-  const mostPlayed = useMemo(() => sortByPlayCount(games).slice(0, 8), [games]);
-  const newest = useMemo(() => sortByRegisteredAt(games).slice(0, 8), [games]);
-  const chips = useMemo(() => presentChips(games), [games]);
-  const filtered = useMemo(() => filterByChip(games, chip), [games, chip]);
+  // Featured = the single most-recently-active game, shown as a hero capsule.
+  const featured = useMemo(() => sortByLastPlayed(games)[0] ?? null, [games]);
 
   if (load.state === "loading") {
     return <p className="muted page__status">Loading games…</p>;
@@ -84,68 +79,23 @@ export function Home({ blockKey }: { blockKey: number }) {
     );
   }
   if (games.length === 0) {
-    return <p className="muted page__status">No conforming games registered yet.</p>;
+    return (
+      <p className="muted page__status">No conforming games registered yet.</p>
+    );
   }
 
   return (
     <div className="home">
+      <GameList games={games} />
       <div className="home__main">
         <section className="row">
           <h2 className="section__title">Featured</h2>
-          <div className="grid grid--featured">
-            {featured.map((g) => (
-              <GameCard key={g.listing.address} game={g} featured />
-            ))}
-          </div>
+          {featured && (
+            <FeaturedHero key={featured.listing.address} game={featured} />
+          )}
         </section>
-
-        <section className="row">
-          <h2 className="section__title">Most played</h2>
-          <div className="grid">
-            {mostPlayed.map((g) => (
-              <GameCard key={g.listing.address} game={g} />
-            ))}
-          </div>
-        </section>
-
-        <section className="row">
-          <h2 className="section__title">New</h2>
-          <div className="grid">
-            {newest.map((g) => (
-              <GameCard key={g.listing.address} game={g} />
-            ))}
-          </div>
-        </section>
-
-        <section className="row">
-          <h2 className="section__title">All games</h2>
-          <div className="chips" role="tablist" aria-label="Filter by game type">
-            <button
-              className={`chip chip--filter${chip === null ? " chip--active" : ""}`}
-              onClick={() => setChip(null)}
-            >
-              all
-            </button>
-            {chips.map((c) => (
-              <button
-                key={c}
-                className={`chip chip--filter${chip === c ? " chip--active" : ""}`}
-                onClick={() => setChip(c)}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
-          <div className="grid">
-            {filtered.map((g) => (
-              <GameCard key={g.listing.address} game={g} />
-            ))}
-          </div>
-          {filtered.length === 0 && <p className="muted">No games in this category.</p>}
-        </section>
+        <ActivityRail games={games} refreshKey={blockKey} />
       </div>
-
-      <ActivityRail games={games} refreshKey={blockKey} />
     </div>
   );
 }

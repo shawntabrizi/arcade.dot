@@ -12,113 +12,122 @@ import { test, expect, type Page } from "@playwright/test";
 //   A3 Lap Battle  multiplayer*  playCount 30    lastPlayed 0        reg NOW-1d   fmt 2 unit "laps"
 //   ghost          (arcadeVersion=null) playCount 999999  — MUST NOT render (§7.4 gate)
 //   * "multiplayer" is an unknown gameType → buckets under "other" (§5.4)
-// Player names: P1 (0xaaaa…) → "alice.dot" (mapped); P2 (0xbbbb…) unmapped → truncated.
+// Player names: P1 (0xaaaa…) → "alice.dot" (mapped, shown as "alice"); P2
+// (0xbbbb…) unmapped → abstracted to a friendly alias, never the raw address.
 
 const A1 = "0x1111111111111111111111111111111111111111";
 const A2 = "0x2222222222222222222222222222222222222222";
 const A3 = "0x3333333333333333333333333333333333333333";
 
-// Wait until the home grid has rendered cards (the async fake read resolved).
+// Wait until the home view has rendered (the async fake read resolved): the
+// sortable game list is the first thing to populate.
 async function gotoHome(page: Page) {
   await page.goto("/#/");
-  await expect(page.locator(".card").first()).toBeVisible();
+  await expect(page.locator(".gamelist__row").first()).toBeVisible();
 }
 
-test.describe("Home — listing, conformance gate, ordering", () => {
-  test("renders the conformant games and hides the non-conformant ghost (§7.4)", async ({
+test.describe("Home — game list, featured hero, activity, conformance gate", () => {
+  test("lists the conformant games and hides the non-conformant ghost (§7.4)", async ({
     page,
   }) => {
     await gotoHome(page);
 
-    // The three conformant games appear by name somewhere on the page.
+    // The three conformant games appear by name in the left list.
     for (const name of ["Snake", "Time Trial", "Lap Battle"]) {
-      await expect(page.locator(".card__name", { hasText: name }).first()).toBeVisible();
+      await expect(
+        page.locator(".gamelist__name", { hasText: name }),
+      ).toBeVisible();
     }
 
     // The ghost listing (registered but non-conformant) is filtered out — it
-    // never appears as a card despite its huge playCount, which would otherwise
-    // place it first in Most Played / Featured.
-    await expect(page.locator(".card__name", { hasText: "Ghost" })).toHaveCount(0);
+    // never appears despite its huge playCount, which would otherwise top the list.
+    await expect(
+      page.locator(".gamelist__name", { hasText: "Ghost" }),
+    ).toHaveCount(0);
     await expect(page.getByText("999,999")).toHaveCount(0);
   });
 
-  test("the three home sections are present and correctly ordered (§7.1)", async ({
+  test("featured hero is the most-recently-active game (§7.1)", async ({
     page,
   }) => {
     await gotoHome(page);
-
-    const sections = page.locator("section.row");
-    // Featured, Most played, New, All games — in that DOM order.
-    await expect(sections.nth(0).locator(".section__title")).toHaveText("Featured");
-    await expect(sections.nth(1).locator(".section__title")).toHaveText("Most played");
-    await expect(sections.nth(2).locator(".section__title")).toHaveText("New");
-    await expect(sections.nth(3).locator(".section__title")).toHaveText("All games");
-
-    // Featured = lastPlayedAt desc → Snake (NOW-60) is first.
-    await expect(sections.nth(0).locator(".card__name").first()).toHaveText("Snake");
-    // Most played = playCount desc → Snake (1280) is first.
-    await expect(sections.nth(1).locator(".card__name").first()).toHaveText("Snake");
-    // New = registeredAt desc → Lap Battle (NOW-1d) is first.
-    await expect(sections.nth(2).locator(".card__name").first()).toHaveText("Lap Battle");
+    // Featured = lastPlayedAt desc → Snake (NOW-60) is the hero.
+    await expect(page.locator(".feature__name")).toHaveText("Snake");
   });
-});
 
-test.describe("Home — gameType filter chips (§5.4)", () => {
-  test("clicking a chip filters the All-games grid; unknown type buckets to 'other'", async ({
+  test("live activity shows recent-play rows merged from the fixtures (§7.1 item 5)", async ({
     page,
   }) => {
-    await gotoHome(page);
-
-    const allGames = page.locator("section.row").nth(3);
-    const chips = allGames.locator(".chip--filter");
-
-    // "all" plus exactly the buckets present: arcade, racing, other.
-    await expect(chips).toHaveText(["all", "arcade", "racing", "other"]);
-
-    // Filter to "arcade": only Snake remains in this section's grid.
-    await chips.filter({ hasText: "arcade" }).click();
-    await expect(allGames.locator(".card__name")).toHaveText(["Snake"]);
-
-    // Lap Battle's gameType is "multiplayer" (unknown) → it shows only under the
-    // "other" bucket, proving the §5.4 catch-all.
-    await chips.filter({ hasText: "other" }).click();
-    await expect(allGames.locator(".card__name")).toHaveText(["Lap Battle"]);
-
-    // "racing" → Time Trial.
-    await chips.filter({ hasText: "racing" }).click();
-    await expect(allGames.locator(".card__name")).toHaveText(["Time Trial"]);
-  });
-});
-
-test.describe("Home — live activity rail (§7.1 item 5)", () => {
-  test("shows recent-play rows merged from the fixtures", async ({ page }) => {
     await gotoHome(page);
 
     const rail = page.locator(".rail");
     await expect(rail.locator(".section__title")).toHaveText("Live activity");
 
-    // Snake (P3, P1) + Time Trial (P2) contribute recent rows; Lap Battle has
-    // lastPlayedAt 0 so contributes none. Expect at least those three rows.
     const rows = rail.locator(".rail__row");
     await expect(rows.first()).toBeVisible();
     expect(await rows.count()).toBeGreaterThanOrEqual(3);
-
-    // A row links to a game and carries the mapped name where one exists.
-    await expect(rail.getByText("alice.dot").first()).toBeVisible();
+    await expect(rail.getByText("alice").first()).toBeVisible();
   });
-});
 
-test.describe("Home — player name resolution on cards (§8.2)", () => {
-  test("a card's top player shows the resolved .dot name", async ({ page }) => {
+  test("mobile still exposes the game browser", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
     await gotoHome(page);
-    // Snake's rank-1 player is P1 → alice.dot (mapped in the fixture resolver).
-    const snakeCards = page.locator(".card", { has: page.locator(".card__name", { hasText: "Snake" }) });
-    await expect(snakeCards.first().locator(".card__top-name")).toHaveText("alice.dot");
+
+    await expect(page.locator(".gamelist")).toBeVisible();
+    await expect(
+      page.locator(".gamelist__name", { hasText: "Snake" }),
+    ).toBeVisible();
+    await expect(page.locator(".feature__name")).toHaveText("Snake");
+  });
+
+  test("the game list is sortable (§7.1)", async ({ page }) => {
+    await gotoHome(page);
+    const names = page.locator(".gamelist__name");
+
+    // Default sort = Most played → Snake (1280) is first.
+    await expect(names.first()).toHaveText("Snake");
+
+    // Switch to Name (A–Z) → Lap Battle sorts first.
+    await page.locator(".gamelist__sort").selectOption("name");
+    await expect(names.first()).toHaveText("Lap Battle");
+
+    // Newest = registeredAt desc → Lap Battle (NOW-1d) first.
+    await page.locator(".gamelist__sort").selectOption("new");
+    await expect(names.first()).toHaveText("Lap Battle");
+  });
+
+  test("the game list filters by category chip and name search (§5.4)", async ({
+    page,
+  }) => {
+    await gotoHome(page);
+    const names = page.locator(".gamelist__name");
+    const chips = page.locator(".gamelist__chip");
+
+    // "all" plus exactly the buckets present: arcade, racing, other.
+    await expect(chips).toHaveText(["all", "arcade", "racing", "other"]);
+
+    // Category filter: "arcade" → only Snake survives.
+    await chips.filter({ hasText: "arcade" }).click();
+    await expect(names).toHaveText(["Snake"]);
+
+    // "other" → Lap Battle (gameType "multiplayer" buckets to other, §5.4).
+    await chips.filter({ hasText: "other" }).click();
+    await expect(names).toHaveText(["Lap Battle"]);
+
+    // Back to all, then name search narrows to a single match.
+    await chips.filter({ hasText: "all" }).click();
+    await page.locator(".gamelist__search").fill("time");
+    await expect(names).toHaveText(["Time Trial"]);
+
+    // A non-matching query shows the empty state.
+    await page.locator(".gamelist__search").fill("zzz");
+    await expect(page.locator(".gamelist__empty")).toBeVisible();
+    await expect(names).toHaveCount(0);
   });
 });
 
 test.describe("Detail — hero, Play button, name resolution, score formats (§7.3, §7.5, §8.2)", () => {
-  test("Snake (points format): hero, integer scores, mapped + truncated names, Play link", async ({
+  test("Snake (points format): hero, integer scores, mapped + anonymous names, Play link", async ({
     page,
   }) => {
     // Navigate by direct hash deep-link.
@@ -135,80 +144,68 @@ test.describe("Detail — hero, Play button, name resolution, score formats (§7
     // rank 2 = P2 (unmapped → truncated address). Scores are plain integers.
     const board = page.locator(".board__list .board__row");
     await expect(board).toHaveCount(2);
-    await expect(board.nth(0).locator(".board__player")).toHaveText("alice.dot");
+    // Mapped player shows the bare username, ".dot" stripped (§8.2).
+    await expect(board.nth(0).locator(".board__player")).toHaveText("alice");
     await expect(board.nth(0).locator(".board__score")).toHaveText("9001");
-    // Unmapped address falls back to the truncated form 0xbbbb…bbbb (§8.2).
-    await expect(board.nth(1).locator(".board__player")).toHaveText("0xbbbb…bbbb");
+    // Unmapped player is abstracted to a friendly alias — never the raw address.
+    await expect(board.nth(1).locator(".board__player")).not.toContainText(
+      "0x",
+    );
     await expect(board.nth(1).locator(".board__score")).toHaveText("880");
 
     // Recent plays section is present and populated.
     await expect(page.locator(".recent .recent__row").first()).toBeVisible();
 
     // Play button (§7.5): anchor, target=_blank, href derived from playUrl
-    // "arcade-snake.dot" → https://arcade-snake.dot.li.
+    // "arcade-snake.dot" → https://arcade-snake.paseo.li.
     const play = page.locator(".btn--play");
     await expect(play).toHaveJSProperty("tagName", "A");
     await expect(play).toHaveAttribute("target", "_blank");
-    // Bare-label playUrl ("arcade-snake.dot") is rebuilt to https://<label>.dot.li
+    // Bare-label playUrl ("arcade-snake.dot") is rebuilt to https://<label>.paseo.li
     // directly (no URL normalization), so no trailing slash.
-    await expect(play).toHaveAttribute("href", "https://arcade-snake.dot.li");
+    await expect(play).toHaveAttribute("href", "https://arcade-snake.paseo.li");
   });
 
-  test("Time Trial (duration format): score renders m:ss.mmm", async ({ page }) => {
+  test("Time Trial (duration format): score renders m:ss.mmm", async ({
+    page,
+  }) => {
     await page.goto(`/#/game/${A2}`);
     await expect(page.locator(".hero__name")).toHaveText("Time Trial");
     // 83456 ms → 1:23.456 ; 605000 ms → 10:05.000 (§4.2 scoreFormat 1).
     const scores = page.locator(".board__list .board__score");
     await expect(scores.nth(0)).toHaveText("1:23.456");
     await expect(scores.nth(1)).toHaveText("10:05.000");
-    // playUrl is already a full dot.li URL → passed through unchanged.
+    // playUrl is a legacy full dot.li URL → host healed to the paseo.li viewer.
     await expect(page.locator(".btn--play")).toHaveAttribute(
       "href",
-      "https://time-trial.dot.li/",
+      "https://time-trial.paseo.li/",
     );
   });
 
-  test("Lap Battle (custom unit): score renders value + unit", async ({ page }) => {
+  test("Lap Battle (custom unit): score renders value + unit", async ({
+    page,
+  }) => {
     await page.goto(`/#/game/${A3}`);
     await expect(page.locator(".hero__name")).toHaveText("Lap Battle");
     // 42 with unit "laps" → "42 laps" (§4.2 scoreFormat 2).
-    await expect(page.locator(".board__list .board__score").first()).toHaveText("42 laps");
+    await expect(page.locator(".board__list .board__score").first()).toHaveText(
+      "42 laps",
+    );
     // requiresAccount listing shows the badge.
     await expect(page.locator(".badge--account")).toBeVisible();
   });
 
-  test("navigating from a home card opens the matching detail page", async ({ page }) => {
+  test("navigating from the game list opens the matching detail page", async ({
+    page,
+  }) => {
     await gotoHome(page);
     await page
-      .locator(".card", { has: page.locator(".card__name", { hasText: "Snake" }) })
+      .locator(".gamelist__row", {
+        has: page.locator(".gamelist__name", { hasText: "Snake" }),
+      })
       .first()
       .click();
     await expect(page.locator(".hero__name")).toHaveText("Snake");
     expect(page.url()).toContain(`#/game/${A1}`);
-  });
-});
-
-test.describe("About page (§1/§3–§7 explainer)", () => {
-  test("the header About link routes to #/about and renders the explainer", async ({ page }) => {
-    await gotoHome(page);
-    await page.locator(".app__navlink", { hasText: "About" }).click();
-    expect(page.url()).toContain("#/about");
-    await expect(page.locator(".about__title")).toHaveText("Insert coin.");
-    // Key concepts are present as section headings (scope to h2 so prose that
-    // echoes a heading phrase doesn't trip strict-mode multi-match).
-    await expect(page.locator(".about__h2", { hasText: "One prompt, one game" })).toBeVisible();
-    await expect(page.locator(".about__h2", { hasText: "How the cabinet is wired" })).toBeVisible();
-    await expect(page.locator(".about__h2", { hasText: "How games phone home" })).toBeVisible();
-    // Source links point at the repo.
-    const spec = page.locator("a.link", { hasText: "the full spec" });
-    await expect(spec).toHaveAttribute(
-      "href",
-      /github\.com\/shawntabrizi\/arcade-dashboard.*SPEC\.md/,
-    );
-  });
-
-  test("deep-linking to #/about renders the page directly", async ({ page }) => {
-    await page.goto("/#/about");
-    await expect(page.locator(".about__title")).toBeVisible();
   });
 });

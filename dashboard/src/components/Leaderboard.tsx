@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { useReads } from "../reads-context";
-import { formatScore, shortAddress } from "../logic";
+import { displayName, formatScore } from "../logic";
 import { useResolvedNames } from "./useResolvedNames";
 import type { Address, ScoreConfig, ScoreEntry } from "../types";
 
@@ -56,11 +56,12 @@ export function Leaderboard({
         <ol className="board__list">
           {entries.map((e, i) => {
             const rank = page * PAGE_SIZE + i + 1;
+            const label = displayName(e.player, names.get(e.player));
             return (
               <li key={`${e.player}-${e.at}-${i}`} className="board__row">
                 <span className="board__rank">#{rank}</span>
-                <span className="board__player" title={e.player}>
-                  {names.get(e.player) ?? shortAddress(e.player)}
+                <span className="board__player" title={label}>
+                  {label}
                 </span>
                 <span className="board__score">{formatScore(e.score, config)}</span>
               </li>

@@ -247,21 +247,26 @@ describe("score formatter", () => {
   });
 });
 
-// ---- playUrl → dot.li (SPEC §7.5) ---------------------------------------
+// ---- playUrl → paseo.li (SPEC §7.5) -------------------------------------
 describe("toLaunchUrl", () => {
-  it("derives https://<label>.dot.li from a bare .dot name", () => {
-    expect(toLaunchUrl("arcade-snake.dot")).toBe("https://arcade-snake.dot.li");
-    expect(toLaunchUrl("snake.dot")).toBe("https://snake.dot.li");
+  it("derives https://<label>.paseo.li from a bare .dot name", () => {
+    expect(toLaunchUrl("arcade-snake.dot")).toBe("https://arcade-snake.paseo.li");
+    expect(toLaunchUrl("snake.dot")).toBe("https://snake.paseo.li");
   });
   it("derives from a bare label", () => {
-    expect(toLaunchUrl("snake")).toBe("https://snake.dot.li");
+    expect(toLaunchUrl("snake")).toBe("https://snake.paseo.li");
   });
-  it("passes through an existing dot.li / https URL", () => {
-    expect(toLaunchUrl("https://time-trial.dot.li")).toBe("https://time-trial.dot.li/");
+  it("heals a legacy dot.li URL to the paseo.li viewer (migration)", () => {
+    expect(toLaunchUrl("https://time-trial.dot.li")).toBe("https://time-trial.paseo.li/");
+    // Path/query are preserved when healing the host.
+    expect(toLaunchUrl("https://snake.dot.li/play?x=1")).toBe("https://snake.paseo.li/play?x=1");
+  });
+  it("passes through a current paseo.li / other https URL unchanged", () => {
+    expect(toLaunchUrl("https://time-trial.paseo.li")).toBe("https://time-trial.paseo.li/");
     expect(toLaunchUrl("https://example.com/play")).toBe("https://example.com/play");
   });
   it("preserves nested labels in a .dot name", () => {
-    expect(toLaunchUrl("app.snake.dot")).toBe("https://app.snake.dot.li");
+    expect(toLaunchUrl("app.snake.dot")).toBe("https://app.snake.paseo.li");
   });
   it("rejects empty / whitespace / unlaunchable schemes", () => {
     expect(toLaunchUrl("")).toBeNull();
