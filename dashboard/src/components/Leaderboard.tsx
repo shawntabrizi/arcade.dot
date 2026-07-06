@@ -31,11 +31,17 @@ export function Leaderboard({
     let cancelled = false;
     setLoading(true);
     (async () => {
-      // Fetch one extra to detect whether a next page exists.
-      const rows = await reads.getLeaderboard(address, page * PAGE_SIZE, PAGE_SIZE + 1);
-      if (cancelled) return;
-      setAtEnd(rows.length <= PAGE_SIZE);
-      setEntries(rows.slice(0, PAGE_SIZE));
+      try {
+        // Fetch one extra to detect whether a next page exists.
+        const rows = await reads.getLeaderboard(address, page * PAGE_SIZE, PAGE_SIZE + 1);
+        if (cancelled) return;
+        setAtEnd(rows.length <= PAGE_SIZE);
+        setEntries(rows.slice(0, PAGE_SIZE));
+      } catch {
+        // Transient read failure — keep last-good rows (§9.3); the next
+        // refreshKey bump retries.
+        if (cancelled) return;
+      }
       setLoading(false);
     })();
     return () => {

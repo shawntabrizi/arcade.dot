@@ -24,6 +24,7 @@
     "@novasamatech/host-api": "^0.8.4",
     "@novasamatech/host-api-wrapper": "^0.8.4",
     "@parity/product-sdk-address": "^0.1.1",
+    "@parity/product-sdk-host": "^0.7.1",
     "@parity/product-sdk-tx": "^0.2.9",
     "@polkadot-api/sdk-ink": "^0.7.0",
     "@polkadot-api/ws-provider": "^0.9.0",

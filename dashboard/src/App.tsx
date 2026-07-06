@@ -57,7 +57,7 @@ export function App() {
         ) : route.name === "about" ? (
           <About />
         ) : (
-          <GameDetail address={route.address} blockKey={blockKey} />
+          <GameDetail key={route.address} address={route.address} blockKey={blockKey} />
         )}
       </main>
 

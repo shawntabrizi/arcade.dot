@@ -8,7 +8,7 @@
  * To add a new game:
  *   1. Create a component that accepts GameComponentProps
  *   2. Call onGameEnd(score) exactly once when the game ends
- *   3. Swap it in App.tsx
+ *   3. Point src/games/active.ts at it (never edit App.tsx for a swap)
  */
 export interface GameComponentProps {
   onGameEnd: (score: number) => void;
