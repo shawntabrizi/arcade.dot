@@ -182,16 +182,16 @@ function game(address: Address): any {
   return c;
 }
 
-// One best-block dry-run read; null on a reverted/failed query (treated as
-// "non-conformant / absent" by callers).
+// One best-block dry-run read. The two failure modes are deliberately kept
+// distinct: a REVERT (r.success === false) is a verdict about the contract
+// (non-conformant / absent) and returns null, which callers may cache for the
+// session; a THROWN error (transport down, contract not found on this node) is
+// transient and is rethrown, so it can never be baked into a session cache or
+// rendered as "0 plays / empty board".
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function q<T>(contract: any, method: string, data: Record<string, unknown> = {}): Promise<T | null> {
-  try {
-    const r = await contract.query(method, { origin: READ_ORIGIN, data });
-    return r.success ? (r.value.response as T) : null;
-  } catch {
-    return null;
-  }
+  const r = await contract.query(method, { origin: READ_ORIGIN, data });
+  return r.success ? (r.value.response as T) : null;
 }
 
 // ---- raw ABI tuple shapes (snake_case fields per the shipped ABIs) -------
@@ -258,7 +258,9 @@ let listingsEnumerated = false;
 const conformanceCache = new Map<string, boolean>();
 
 // Read ONLY Module A stats (SPEC §7.4 batched per game) — the mutable surface
-// refreshed every best block. Failed reads degrade to 0 rather than blanking.
+// refreshed every best block. A transient read failure throws (the caller omits
+// the game so mergeStats keeps its last-good stats, §9.3); a revert degrades
+// that one field to 0.
 async function readStats(address: Address): Promise<GameStats> {
   const c = game(address);
   const [playCount, uniquePlayers, lastPlayedAt] = await Promise.all([
@@ -328,7 +330,13 @@ export function createChainReads(): ArcadeReads {
       const listings = await enumerateListings();
       const addrs = [...listings.keys()];
       // Conformance gate + batched stats per game, in parallel (SPEC §7.4).
-      const stats = await Promise.all(addrs.map((a) => statsIfConformant(a)));
+      // Per-game reads catch: one game's transient failure (e.g. a registered
+      // address the node can't find right now) omits that game this round
+      // instead of failing the whole directory. Registry enumeration above
+      // still throws on transport failure → Home's error state.
+      const stats = await Promise.all(
+        addrs.map((a) => statsIfConformant(a).catch(() => null)),
+      );
       const games: Game[] = [];
       addrs.forEach((addr, i) => {
         const s = stats[i];
@@ -346,8 +354,10 @@ export function createChainReads(): ArcadeReads {
         addresses.map(async (addr) => {
           const listing = listingCache.get(addr.toLowerCase());
           if (!listing) return null; // not in this session's listing set
-          const stats = await statsIfConformant(addr);
-          if (!stats) return null; // went non-conformant — drop silently
+          const stats = await statsIfConformant(addr).catch(() => null);
+          // Transient failure or non-conformant → omit from this refresh;
+          // mergeStats keeps the caller's last-good stats (§9.3).
+          if (!stats) return null;
           return { listing, stats } as Game;
         }),
       );
@@ -425,22 +435,39 @@ export function createChainReads(): ArcadeReads {
           const name = await q<string>(c, "nameOf", { addr: player });
           if (name && name.length > 0) resolved = name;
         }
+        // Cache only a real verdict (a name, or a fail-closed ""/revert).
+        nameCache.set(key, resolved);
       } catch {
-        /* keep fallback */
+        // Transient failure — return the fallback WITHOUT caching it, so a
+        // player who does own a name isn't stuck anonymous all session.
       }
-      nameCache.set(key, resolved);
       return resolved;
     },
 
     onNewBlock(cb): () => void {
-      const sub = client().bestBlocks$.subscribe({
-        next: (blocks) => {
-          const head = blocks[0];
-          if (head) cb(head.number);
-        },
-        error: () => {},
-      });
-      return () => sub.unsubscribe();
+      // On a subscription error, resubscribe after a delay instead of going
+      // silently stale (the header would otherwise keep pulsing "live" on a
+      // dead subscription and all per-block refresh would stop).
+      let stopped = false;
+      let sub: { unsubscribe(): void } | null = null;
+      let retry: ReturnType<typeof setTimeout> | null = null;
+      const subscribe = () => {
+        sub = client().bestBlocks$.subscribe({
+          next: (blocks) => {
+            const head = blocks[0];
+            if (head) cb(head.number);
+          },
+          error: () => {
+            if (!stopped) retry = setTimeout(subscribe, 5_000);
+          },
+        });
+      };
+      subscribe();
+      return () => {
+        stopped = true;
+        if (retry) clearTimeout(retry);
+        sub?.unsubscribe();
+      };
     },
   };
 }

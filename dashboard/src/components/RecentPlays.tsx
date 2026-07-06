@@ -29,9 +29,15 @@ export function RecentPlays({
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const rows = await reads.getRecent(address, 0, RING);
-      if (cancelled) return;
-      setEntries(rows);
+      try {
+        const rows = await reads.getRecent(address, 0, RING);
+        if (cancelled) return;
+        setEntries(rows);
+      } catch {
+        // Transient read failure — keep last-good rows (§9.3); the next
+        // refreshKey bump retries.
+        if (cancelled) return;
+      }
       setLoading(false);
     })();
     return () => {
