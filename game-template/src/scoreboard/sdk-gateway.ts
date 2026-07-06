@@ -153,7 +153,12 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
         notify();
         return { inHost: true };
       }
-      connected = adopt(result.value.publicKey);
+      const next = adopt(result.value.publicKey);
+      // A different account than the one `mapped` was established for must
+      // re-check mapping, or submitScore skips the map_account batch and
+      // dry-runs as an unmapped origin (AccountUnmapped).
+      if (next.ss58 !== connected?.ss58) mapped = false;
+      connected = next;
       lastInHost = true;
       lastError = null;
       notify();
@@ -180,16 +185,17 @@ export function createSdkGateway(options: SdkGatewayOptions = {}): ChainGateway 
   async function readOrdering(): Promise<ScoreOrdering> {
     if (orderingCache !== null) return orderingCache;
     const contract = gcsContract();
-    // Default to higher-is-better if the contract isn't reachable; the value is
-    // immutable per SPEC §4.2 so caching is safe.
-    const o = contract
-      ? await contract
-          .query("scoreOrdering", { origin: READ_ORIGIN, data: {} })
-          .then((r: { success: boolean; value?: { response: number } }) =>
-            r.success ? r.value!.response : 0,
-          )
-      : 0;
-    orderingCache = (o === 1 ? 1 : 0) as ScoreOrdering;
+    // No contract configured → nothing to read; default higher-is-better.
+    if (!contract) return 0;
+    const r: { success: boolean; value?: { response: number } } = await contract.query(
+      "scoreOrdering",
+      { origin: READ_ORIGIN, data: {} },
+    );
+    // Cache only a real read. The value is immutable (SPEC §4.2), but a failed
+    // read is not a value — caching its 0 default would invert isWorthKeeping
+    // for a lower-is-better game for the whole session.
+    if (!r.success) return 0;
+    orderingCache = (r.value!.response === 1 ? 1 : 0) as ScoreOrdering;
     return orderingCache;
   }
 

@@ -86,6 +86,10 @@ export function submitInBlock(tx, signer, label) {
         }
       },
       error: (err) => finish(() => rej(err)),
+      // A watch that completes without ever reporting inclusion (e.g. a
+      // dropped tx) must fail loud, not hang the pipeline step forever.
+      complete: () =>
+        finish(() => rej(new Error(`${label}: tx watch ended without inclusion`))),
     });
   });
 }

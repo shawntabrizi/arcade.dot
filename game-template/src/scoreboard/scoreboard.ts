@@ -199,8 +199,13 @@ export class Scoreboard {
       await this.gateway.connect();
     }
     await this.submit(score);
-    this.held = null;
-    clearGuestBest(this.store, this.gameKey);
+    // Only clear if the hold still refers to what we just submitted — the
+    // player may have set a NEW best while the submit was in flight, and that
+    // score must stay held (and persisted) for its own submit.
+    if (this.held === score) {
+      this.held = null;
+      clearGuestBest(this.store, this.gameKey);
+    }
   }
 
   // The single submit funnel. submitScore maps-if-needed and submits in one
