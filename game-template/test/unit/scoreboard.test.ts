@@ -367,3 +367,49 @@ describe("on-load session detection (SPEC §8.1/§8.3)", () => {
     unsub();
   });
 });
+
+describe("offline guest play (SPEC §8.3 — an unreachable chain must not lose the score)", () => {
+  // A gateway whose contract read rejects, as when the chain is unreachable at
+  // game over. The guest path must still hold + persist the score; only a
+  // signed-in save (which needs the contract's real ordering) may fail.
+  function deadChainGateway(opts: { player?: `0x${string}` | null } = {}) {
+    const made = fakeGateway({ player: opts.player ?? null });
+    made.gateway.scoreOrdering = async () => {
+      throw new Error("chain unreachable");
+    };
+    return made;
+  }
+
+  it("guest: the score is held, persisted, and prompted via the fallback ordering", async () => {
+    const store = new FakeStore();
+    const sb = new Scoreboard(deadChainGateway().gateway, store, { gameKey: GAME_KEY });
+    const out = await sb.onGameEnd(10);
+    expect(out).toEqual({ kind: "prompt", score: 10 });
+    expect(readGuestBest(store, GAME_KEY)).toBe(10);
+    expect(sb.heldScore()).toBe(10);
+  });
+
+  it("guest lower-is-better: fallbackOrdering decides worth-keeping offline", async () => {
+    const store = new FakeStore();
+    writeGuestBest(store, GAME_KEY, 10);
+    const sb = new Scoreboard(deadChainGateway().gateway, store, {
+      gameKey: GAME_KEY,
+      fallbackOrdering: 1,
+    });
+    // Slower than the persisted best is not an improvement — no prompt, and the
+    // persisted best is untouched.
+    expect((await sb.onGameEnd(12)).kind).toBe("ignored");
+    expect(readGuestBest(store, GAME_KEY)).toBe(10);
+    // Faster IS an improvement under ordering 1.
+    expect((await sb.onGameEnd(8)).kind).toBe("prompt");
+    expect(readGuestBest(store, GAME_KEY)).toBe(8);
+  });
+
+  it("signed-in: the read failure surfaces (a save needs the contract's real ordering)", async () => {
+    const player = "0x00000000000000000000000000000000000000cc" as `0x${string}`;
+    const sb = new Scoreboard(deadChainGateway({ player }).gateway, new FakeStore(), {
+      gameKey: GAME_KEY,
+    });
+    await expect(sb.onGameEnd(10)).rejects.toThrow("chain unreachable");
+  });
+});

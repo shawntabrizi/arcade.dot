@@ -11,6 +11,11 @@ export interface ScoreboardConfig {
   // SPEC §5.1 / §8.3: when true, the game gates sign-in at launch instead of at
   // game over. The template surfaces this; the dashboard badges it.
   requiresAccount?: boolean;
+  // Ordering to use on the guest path when the contract's scoreOrdering can't
+  // be read (chain unreachable). Wire from arcade.config.json's
+  // contract.scoreOrdering — the same value the contract was constructed with —
+  // so offline guest play (SPEC §8.3) never loses a score. Defaults to 0.
+  fallbackOrdering?: ScoreOrdering;
 }
 
 // Result of feeding a finished match into the scoreboard. The UI reads this to
@@ -81,6 +86,7 @@ export class Scoreboard {
   private readonly gateway: ChainGateway;
   private readonly store: GuestStore;
   private readonly gameKey: string;
+  private readonly fallbackOrdering: ScoreOrdering;
   readonly requiresAccount: boolean;
 
   // The guest's most recent worth-keeping score, awaiting a sign-in decision.
@@ -92,6 +98,7 @@ export class Scoreboard {
     this.store = store;
     this.gameKey = config.gameKey;
     this.requiresAccount = config.requiresAccount ?? false;
+    this.fallbackOrdering = config.fallbackOrdering ?? 0;
   }
 
   isSignedIn(): boolean {
@@ -163,7 +170,17 @@ export class Scoreboard {
   // Gating on worth-keeping (a personal best) — even when signed in — means we
   // never ask the player to sign for a score that wouldn't change the board.
   async onGameEnd(score: number): Promise<GameOverOutcome> {
-    const ordering = await this.gateway.scoreOrdering();
+    let ordering: ScoreOrdering;
+    try {
+      ordering = await this.gateway.scoreOrdering();
+    } catch (e) {
+      // Guest play is zero-chain (SPEC §8.3): an unreachable chain must never
+      // lose the score, so fall back to the config-supplied ordering. A
+      // signed-in save DOES need the contract's real ordering — rethrow.
+      if (this.isSignedIn()) throw e;
+      ordering = this.fallbackOrdering;
+    }
+    // For a guest, knownBest reads only the local GuestStore — no chain.
     const saved = await this.knownBest();
     // The best we'd actually submit: the better of what's already saved (the
     // signed-in player's on-chain best, or the guest's persisted best) and any
