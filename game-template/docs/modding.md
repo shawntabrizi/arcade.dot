@@ -12,7 +12,7 @@ Three folders, three responsibilities:
 
 The smart contract sits behind the scoreboard layer:
 
-- **`contracts/leaderboard/lib.rs`** — the GCS v1 reference contract (SPEC §4.6) on Paseo Asset Hub: personal bests keyed by `caller()` (H160), a top-100 leaderboard, a 20-slot recent ring, and activity stats. The TypeScript reads it via `@polkadot-api/sdk-ink` (`src/scoreboard/gcs.ts` / `reads.ts`); writes go through the `ChainGateway` seam (`gateway.ts` → `sdk-gateway.ts`).
+- **`contracts/gcs-reference/lib.rs`** — the GCS v1 reference contract (SPEC §4.6) on Paseo Asset Hub: personal bests keyed by `caller()` (H160), a top-100 leaderboard, a 20-slot recent ring, and activity stats. The TypeScript reads it via `@polkadot-api/sdk-ink` (`src/scoreboard/gcs.ts` / `reads.ts`); writes go through the `ChainGateway` seam (`gateway.ts` → `sdk-gateway.ts`).
 
 That's the whole architecture. Two interfaces (`GameComponentProps`, `ScoreboardAPI`) define the seams; everything else is implementation behind one of them.
 
@@ -185,7 +185,7 @@ Use the contract for the hot index (player → best score) and Bulletin for the 
 
 ## Modifying the contract
 
-The contract lives in `contracts/leaderboard/lib.rs` — the GCS v1 reference implementation (SPEC §4.6). The template is designed to **deploy it unmodified**: its ABI is identical for every conforming game, which is what lets the dashboard read any game generically. If you change it, you risk breaking that conformance — keep `arcadeVersion()` returning `1` and the §4 read/write surface intact. After changes:
+The contract lives in `contracts/gcs-reference/lib.rs` — the GCS v1 reference implementation (SPEC §4.6). The template is designed to **deploy it unmodified**: its ABI is identical for every conforming game, which is what lets the dashboard read any game generically. If you change it, you risk breaking that conformance — keep `arcadeVersion()` returning `1` and the §4 read/write surface intact. After changes:
 
 ```bash
 npm run arcade:deploy-contract

@@ -1,9 +1,0 @@
-[
-  {
-    "type": "function",
-    "name": "getBest",
-    "inputs": [{ "name": "player", "type": "address" }],
-    "outputs": [{ "name": "", "type": "uint128" }],
-    "stateMutability": "view"
-  }
-]

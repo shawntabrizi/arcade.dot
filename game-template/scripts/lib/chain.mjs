@@ -4,6 +4,8 @@
 // config.mjs / listing.mjs / pipeline-state.mjs and is unit-tested without this
 // module. Nothing here is imported by the unit tests.
 
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,12 +23,43 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Repo layout: game-template/scripts/lib/chain.mjs → game-template/ is two up.
+// Everything the pipeline needs lives INSIDE the template so a standalone
+// clone (the published starter) can deploy without the monorepo around it.
 export const TEMPLATE_DIR = resolve(__dirname, "..", "..");
-export const CONTRACTS_DIR = resolve(TEMPLATE_DIR, "..", "contracts");
 export const CONFIG_PATH = resolve(TEMPLATE_DIR, "arcade.config.json");
 export const CDM_PATH = resolve(TEMPLATE_DIR, "cdm.json");
 export const STATE_PATH = resolve(TEMPLATE_DIR, ".arcade-pipeline.json");
-export const CONTRACTS_TARGET = resolve(CONTRACTS_DIR, "target");
+export const CONTRACTS_TARGET = resolve(TEMPLATE_DIR, "target");
+
+/**
+ * Ensure the GCS reference contract artifacts exist, building them from the
+ * template's own contracts/gcs-reference when missing (target/ is gitignored,
+ * so a fresh clone always builds once). Fails loud with the install steps when
+ * the PolkaVM toolchain isn't available.
+ */
+export function ensureGcsArtifacts() {
+  const abi = resolve(CONTRACTS_TARGET, "gcs-reference.release.abi.json");
+  const code = resolve(CONTRACTS_TARGET, "gcs-reference.release.polkavm");
+  if (existsSync(abi) && existsSync(code)) return "prebuilt";
+  console.log("── building contracts/gcs-reference (cargo pvm-contract build --release)");
+  const r = spawnSync(
+    "cargo",
+    ["pvm-contract", "build", "--release", "-p", "gcs-reference"],
+    { cwd: TEMPLATE_DIR, stdio: "inherit" },
+  );
+  if (r.error || r.status !== 0) {
+    throw new Error(
+      "Building the GCS reference contract failed. The pipeline needs the PolkaVM contract toolchain: " +
+        "rustup (the nightly toolchain in rust-toolchain.toml) and cargo-pvm-contract " +
+        "(https://github.com/paritytech/cargo-pvm-contract). Install them and re-run, or drop " +
+        "prebuilt gcs-reference.release.{abi.json,polkavm} into target/.",
+    );
+  }
+  if (!existsSync(abi) || !existsSync(code)) {
+    throw new Error(`Contract build succeeded but ${abi} / ${code} are missing.`);
+  }
+  return "built";
+}
 
 // SPEC §10.5: paseo-next-v2.
 export const ASSET_HUB_WS = "wss://paseo-asset-hub-next-rpc.polkadot.io";

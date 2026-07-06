@@ -13,7 +13,7 @@ Each folder is self-contained with its own `package.json`, build, and docs — t
 
 ## How the two fit together
 
-The **Arcade** is a singleton registry contract on Paseo Asset Hub (source: [`game-template/contracts/arcade/`](game-template/contracts/arcade/)).
+The **Arcade** is a singleton registry contract on Paseo Asset Hub (source: [`contracts/registry/`](contracts/registry/)).
 
 1. A game built from `game-template/` deploys its own leaderboard contract and is **registered** with the Arcade via `arcade.registerGame(addr, name, image_uri)`.
 2. When a player submits a score, the game calls `arcade.recordScore(gameAddr)`; the Arcade pulls `getBest(player)` cross-contract and accrues the delta to the player's total.

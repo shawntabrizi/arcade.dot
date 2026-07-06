@@ -220,7 +220,7 @@ It stops and exits non-zero at the first failure: no silent partial ship.
 Notes on individual steps:
 
 - **Step 4 (`arcade:deploy-contract`)** builds the GCS reference contract
-  (`contracts/leaderboard/lib.rs`) and deploys it with the
+  (`contracts/gcs-reference/lib.rs`) and deploys it with the
   `scoreOrdering`/`scoreFormat`/`scoreUnit` from config and the registry
   address from `cdm.json` as constructor args, then records the deployed
   address + ABI in `cdm.json`. This replaces `playground contract deploy`,
@@ -356,7 +356,7 @@ not the registry, filters junk.
 - **The pipeline library** (`scripts/` and `scripts/lib/`). The config
   validator, listing assembly, chain helpers, and step runners are correct and
   tested — edit `arcade.config.json`, not the scripts.
-- **`contracts/leaderboard/lib.rs`** — the canonical GCS v1 reference contract
+- **`contracts/gcs-reference/lib.rs`** — the canonical GCS v1 reference contract
   (SPEC §4.6). Deploy it unmodified; its ABI is identical for every conforming
   game, which is the point of the standard.
 - The single chain seam is `ChainGateway` (`gateway.ts`). Reads/writes resolve
