@@ -1,18 +1,18 @@
 [package]
-name = "arcade"
+name = "gcs-reference"
 version.workspace = true
 edition.workspace = true
-description = "Arcade — singleton registry + cross-game leaderboard for every game built from this template."
+description = "Game Contract Standard (GCS) v1 reference implementation (SPEC §4). Scaffold — see lib.rs TODO."
 
 # CDM package identity — required by `dot contract deploy` (v0.27+) detection.
 [package.metadata.cdm]
-package = "@example/arcade-playground"
+package = "@arcade/gcs-reference"
 
 [lib]
 path = "lib.rs"
 
 [[bin]]
-name = "arcade"
+name = "gcs-reference"
 path = "lib.rs"
 
 [dependencies]

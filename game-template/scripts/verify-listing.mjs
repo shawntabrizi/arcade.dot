@@ -4,7 +4,6 @@
 // (SPEC §10.4 — no silent partial success).
 
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 
 import { createClient } from "polkadot-api";
 import { getWsProvider } from "@polkadot-api/ws-provider";
@@ -14,7 +13,6 @@ import {
   ASSET_HUB_WS,
   CDM_PATH,
   CONFIG_PATH,
-  CONTRACTS_TARGET,
   STATE_PATH,
   cdmTargetKey,
   emitSummary,
@@ -48,7 +46,13 @@ async function main() {
   }
   const game = gcsEntry.address;
 
-  const registryAbi = readJson(resolve(CONTRACTS_TARGET, "registry.release.abi.json"));
+  // The registry is a deployed singleton the template never builds; its ABI
+  // ships as data in cdm.json (like the dashboard's) so verify works on a
+  // standalone clone with no contracts build output around.
+  const registryAbi = cdm.contracts?.[key]?.["@arcade/registry"]?.abi;
+  if (!registryAbi) {
+    throw new Error("cdm.json is missing the @arcade/registry ABI entry.");
+  }
   const expected = buildListingMetadata(config, readState(STATE_PATH).thumbnailCid ?? "");
 
   const origin = suriSigner().ss58;

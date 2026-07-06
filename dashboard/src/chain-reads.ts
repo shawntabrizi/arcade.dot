@@ -29,11 +29,7 @@ const ASSET_HUB_GENESIS =
   "0xbf0488dbe9daa1de1c08c5f743e26fdc2a4ecd74cf87dd1b4b1eeb99ae4ef19f" as const;
 import dotnsReverseResolverAbi from "./abis/DotnsReverseResolver.json";
 import type { ArcadeReads } from "./arcade-reads";
-import {
-  isConformant,
-  shortAddress,
-  SUPPORTED_ARCADE_VERSION,
-} from "./logic";
+import { isConformant, shortAddress } from "./logic";
 import type {
   Address,
   Game,
@@ -114,7 +110,7 @@ function gcsAbi(): unknown[] {
 function chainProvider(endpoint: string) {
   const directWs =
     typeof window === "undefined" ||
-    /^localhost(:\d+)?$/.test(window.location.host);
+    /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.host);
   return directWs ? getWsProvider(endpoint) : createPapiProvider(ASSET_HUB_GENESIS);
 }
 
@@ -389,13 +385,11 @@ export function createChainReads(): ArcadeReads {
       const cached = scoreConfigCache.get(key);
       if (cached) return cached;
       const c = game(address);
-      const [ordering, format, unit] = await Promise.all([
-        q<number>(c, "scoreOrdering"),
+      const [format, unit] = await Promise.all([
         q<number>(c, "scoreFormat"),
         q<string>(c, "scoreUnit"),
       ]);
       const config: ScoreConfig = {
-        scoreOrdering: Number(ordering ?? 0),
         scoreFormat: Number(format ?? 0),
         scoreUnit: unit ?? "",
       };
@@ -483,5 +477,3 @@ export function thumbnailGateways(): string[] {
   ];
   return gateways;
 }
-
-export { SUPPORTED_ARCADE_VERSION };

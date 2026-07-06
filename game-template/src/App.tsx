@@ -160,6 +160,7 @@ export function App() {
         {
           gameKey: GAME_KEY,
           requiresAccount: REQUIRES_ACCOUNT,
+          fallbackOrdering: SCORE_ORDERING,
         },
       ),
     [],

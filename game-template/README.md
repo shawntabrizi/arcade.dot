@@ -91,7 +91,7 @@ score-ordering/format/unit (see [`CLAUDE.md`](CLAUDE.md) §2).
                   │   one specific scoreboard impl.     │
                   └─────────────────────────────────────┘
 
-contracts/leaderboard/lib.rs
+contracts/gcs-reference/lib.rs
   GCS v1 reference contract (SPEC §4.6) — keyed by caller (H160); personal
   bests, a top-100 leaderboard, a 20-slot recent ring, and activity stats.
 ```
@@ -134,7 +134,7 @@ See [`docs/modding.md`](docs/modding.md) → "Swap the backend" for both.
 
 ```
 contracts/
-└── leaderboard/
+└── gcs-reference/
     ├── Cargo.toml
     └── lib.rs                    # the PVM smart contract
 src/

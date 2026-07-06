@@ -81,7 +81,7 @@ export function assetHubEndpoint(): string {
 function chainProvider(endpoint: string) {
   const directWs =
     typeof window === "undefined" ||
-    /^localhost(:\d+)?$/.test(window.location.host);
+    /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(window.location.host);
   return directWs ? getWsProvider(endpoint) : createPapiProvider(ASSET_HUB_GENESIS);
 }
 

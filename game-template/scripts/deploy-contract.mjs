@@ -21,6 +21,7 @@ import {
   CONTRACTS_TARGET,
   cdmTargetKey,
   emitSummary,
+  ensureGcsArtifacts,
   ensureMapped,
   submitInBlock,
   suriSigner,
@@ -45,6 +46,7 @@ async function main() {
     );
   }
 
+  summary.contractBuild = ensureGcsArtifacts();
   const gcsAbi = readJson(resolve(CONTRACTS_TARGET, "gcs-reference.release.abi.json"));
   const gcsCode = readFileSync(resolve(CONTRACTS_TARGET, "gcs-reference.release.polkavm"));
 

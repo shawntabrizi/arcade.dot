@@ -15,7 +15,7 @@
     "b7a87bf51613d89f": {
       "@arcade/gcs-reference": {
         "version": 0,
-        "address": "0x5d38af8b84c06d26113d94b596ccca99f2078acc",
+        "address": "",
         "abi": [
           {
             "type": "constructor",
@@ -275,6 +275,232 @@
             ],
             "outputs": [],
             "stateMutability": "nonpayable"
+          }
+        ]
+      },
+      "@arcade/registry": {
+        "version": 0,
+        "address": "0x4d1891947e2d25eda37005b476c67fb007003cc2",
+        "abi": [
+          {
+            "type": "constructor",
+            "inputs": [],
+            "stateMutability": "nonpayable"
+          },
+          {
+            "type": "function",
+            "name": "register",
+            "inputs": [
+              {
+                "name": "meta",
+                "type": "tuple",
+                "components": [
+                  {
+                    "name": "name",
+                    "type": "string"
+                  },
+                  {
+                    "name": "game_type",
+                    "type": "string"
+                  },
+                  {
+                    "name": "short_description",
+                    "type": "string"
+                  },
+                  {
+                    "name": "play_url",
+                    "type": "string"
+                  },
+                  {
+                    "name": "thumbnail_cid",
+                    "type": "string"
+                  },
+                  {
+                    "name": "requires_account",
+                    "type": "bool"
+                  },
+                  {
+                    "name": "extra_cid",
+                    "type": "string"
+                  }
+                ]
+              }
+            ],
+            "outputs": [],
+            "stateMutability": "nonpayable"
+          },
+          {
+            "type": "function",
+            "name": "unlist",
+            "inputs": [],
+            "outputs": [],
+            "stateMutability": "nonpayable"
+          },
+          {
+            "type": "function",
+            "name": "gameCount",
+            "inputs": [],
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint32"
+              }
+            ],
+            "stateMutability": "view"
+          },
+          {
+            "type": "function",
+            "name": "getGames",
+            "inputs": [
+              {
+                "name": "offset",
+                "type": "uint32"
+              },
+              {
+                "name": "limit",
+                "type": "uint32"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "",
+                "type": "tuple[]",
+                "components": [
+                  {
+                    "name": "game",
+                    "type": "address"
+                  },
+                  {
+                    "name": "listing",
+                    "type": "tuple",
+                    "components": [
+                      {
+                        "name": "meta",
+                        "type": "tuple",
+                        "components": [
+                          {
+                            "name": "name",
+                            "type": "string"
+                          },
+                          {
+                            "name": "game_type",
+                            "type": "string"
+                          },
+                          {
+                            "name": "short_description",
+                            "type": "string"
+                          },
+                          {
+                            "name": "play_url",
+                            "type": "string"
+                          },
+                          {
+                            "name": "thumbnail_cid",
+                            "type": "string"
+                          },
+                          {
+                            "name": "requires_account",
+                            "type": "bool"
+                          },
+                          {
+                            "name": "extra_cid",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      {
+                        "name": "meta_version",
+                        "type": "uint32"
+                      },
+                      {
+                        "name": "registered_at",
+                        "type": "uint64"
+                      },
+                      {
+                        "name": "updated_at",
+                        "type": "uint64"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "stateMutability": "view"
+          },
+          {
+            "type": "function",
+            "name": "getListing",
+            "inputs": [
+              {
+                "name": "game",
+                "type": "address"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "",
+                "type": "tuple",
+                "components": [
+                  {
+                    "name": "isSome",
+                    "type": "bool"
+                  },
+                  {
+                    "name": "value",
+                    "type": "tuple",
+                    "components": [
+                      {
+                        "name": "meta",
+                        "type": "tuple",
+                        "components": [
+                          {
+                            "name": "name",
+                            "type": "string"
+                          },
+                          {
+                            "name": "game_type",
+                            "type": "string"
+                          },
+                          {
+                            "name": "short_description",
+                            "type": "string"
+                          },
+                          {
+                            "name": "play_url",
+                            "type": "string"
+                          },
+                          {
+                            "name": "thumbnail_cid",
+                            "type": "string"
+                          },
+                          {
+                            "name": "requires_account",
+                            "type": "bool"
+                          },
+                          {
+                            "name": "extra_cid",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      {
+                        "name": "meta_version",
+                        "type": "uint32"
+                      },
+                      {
+                        "name": "registered_at",
+                        "type": "uint64"
+                      },
+                      {
+                        "name": "updated_at",
+                        "type": "uint64"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "stateMutability": "view"
           }
         ]
       }
