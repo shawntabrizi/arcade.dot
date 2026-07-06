@@ -27,10 +27,10 @@ export interface GameStats {
   lastPlayedAt: number; // unix seconds; 0 = never played
 }
 
-// SPEC §4.2 immutable score config, cached for the session.
+// SPEC §4.2 immutable score config, cached for the session. Only the display
+// fields: the dashboard never re-sorts (getLeaderboard returns contract-sorted
+// rows), so scoreOrdering is not read.
 export interface ScoreConfig {
-  // 0 = higher is better, 1 = lower is better
-  scoreOrdering: number;
   // 0 = points (int), 1 = duration ms (m:ss.mmm), 2 = custom unit
   scoreFormat: number;
   scoreUnit: string;

@@ -1,13 +1,20 @@
 import type { ScoreboardAPI, ScoreEntry, ScoreOrdering } from "./api";
 import type { ChainGateway } from "./gateway";
+import arcadeConfig from "../../arcade.config.json";
 
 // Local-only fallback (SPEC §10.4 "play fully offline"): no chain, no signer,
 // no account. Scores live in localStorage so the in-game board still works with
 // no contract deployed and no host. A deterministic local H160 stands in for
 // the player so the board can highlight "you".
 const STORAGE_KEY = "arcade:local-scores";
-const LOCAL_PLAYER = "0x0000000000000000000000000000000000l0ca1" as `0x${string}`;
+const LOCAL_PLAYER = "0x0000000000000000000000000000000000010ca1" as `0x${string}`;
 const MAX_ENTRIES = 100;
+
+// Offline there is no contract to ask, so the ordering comes from the same
+// single source the contract is constructed with (arcade.config.json, SPEC
+// §6.5). Reads and the gateway share this value by construction.
+const ORDERING: ScoreOrdering =
+  (arcadeConfig.contract?.scoreOrdering as ScoreOrdering) ?? 0;
 
 function read(): ScoreEntry[] {
   try {
@@ -34,7 +41,8 @@ export const localScoreboard: ScoreboardAPI = {
   async getTopScores(limit = 10) {
     return read()
       .slice()
-      .sort((a, b) => b.score - a.score)
+      // Best first under the configured ordering (SPEC §4.2).
+      .sort((a, b) => (ORDERING === 1 ? a.score - b.score : b.score - a.score))
       .slice(0, limit);
   },
 
@@ -46,19 +54,20 @@ export const localScoreboard: ScoreboardAPI = {
     const bests = read()
       .filter((e) => e.player.toLowerCase() === player.toLowerCase())
       .map((e) => e.score);
-    return bests.length === 0 ? null : Math.max(...bests);
+    if (bests.length === 0) return null;
+    return ORDERING === 1 ? Math.min(...bests) : Math.max(...bests);
   },
 };
 
 // A ChainGateway that writes to localStorage instead of a chain — drop-in for
 // the Scoreboard when playing fully offline. "Sign in" is a no-op that adopts
 // the local player; submit appends to the local log.
-export function createLocalGateway(ordering: ScoreOrdering = 0): ChainGateway {
+export function createLocalGateway(): ChainGateway {
   let connected = false;
   const listeners = new Set<() => void>();
   return {
     async scoreOrdering() {
-      return ordering;
+      return ORDERING;
     },
     async accountDetails() {
       // Offline: a deterministic local player, no real chain balance/mapping.

@@ -210,9 +210,9 @@ describe("mergeStats", () => {
 
 // ---- score formatter (SPEC §4.2, all 3 formats) -------------------------
 describe("score formatter", () => {
-  const points: ScoreConfig = { scoreOrdering: 0, scoreFormat: 0, scoreUnit: "" };
-  const ms: ScoreConfig = { scoreOrdering: 1, scoreFormat: 1, scoreUnit: "" };
-  const unit: ScoreConfig = { scoreOrdering: 0, scoreFormat: 2, scoreUnit: "laps" };
+  const points: ScoreConfig = { scoreFormat: 0, scoreUnit: "" };
+  const ms: ScoreConfig = { scoreFormat: 1, scoreUnit: "" };
+  const unit: ScoreConfig = { scoreFormat: 2, scoreUnit: "laps" };
 
   it("format 0 = integer points", () => {
     expect(formatScore(0n, points)).toBe("0");

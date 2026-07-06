@@ -83,7 +83,7 @@ export function createFakeReads(
       return findConformant(address)?.game ?? null;
     },
     async getScoreConfig(address) {
-      return find(address)?.config ?? { scoreOrdering: 0, scoreFormat: 0, scoreUnit: "" };
+      return find(address)?.config ?? { scoreFormat: 0, scoreUnit: "" };
     },
     async getLeaderboard(address, offset, limit) {
       const f = find(address);
@@ -157,7 +157,7 @@ export const SAMPLE_GAMES: FakeGame[] = [
       },
       stats: { playCount: 1280, uniquePlayers: 342, lastPlayedAt: NOW - 60 },
     },
-    config: { scoreOrdering: 0, scoreFormat: 0, scoreUnit: "" },
+    config: { scoreFormat: 0, scoreUnit: "" },
     leaderboard: [
       { player: P1, score: 9001n, at: NOW - 3600 },
       { player: P2, score: 880n, at: NOW - 7200 },
@@ -185,7 +185,7 @@ export const SAMPLE_GAMES: FakeGame[] = [
       },
       stats: { playCount: 540, uniquePlayers: 90, lastPlayedAt: NOW - 600 },
     },
-    config: { scoreOrdering: 1, scoreFormat: 1, scoreUnit: "" },
+    config: { scoreFormat: 1, scoreUnit: "" },
     leaderboard: [
       { player: P2, score: 83456n, at: NOW - 1200 }, // 1:23.456
       { player: P3, score: 605000n, at: NOW - 2400 }, // 10:05.000
@@ -209,7 +209,7 @@ export const SAMPLE_GAMES: FakeGame[] = [
       },
       stats: { playCount: 30, uniquePlayers: 12, lastPlayedAt: 0 },
     },
-    config: { scoreOrdering: 0, scoreFormat: 2, scoreUnit: "laps" },
+    config: { scoreFormat: 2, scoreUnit: "laps" },
     leaderboard: [{ player: P1, score: 42n, at: NOW - 5000 }],
     recent: [],
   },
@@ -232,7 +232,7 @@ export const SAMPLE_GAMES: FakeGame[] = [
       },
       stats: { playCount: 999999, uniquePlayers: 1, lastPlayedAt: NOW - 10 },
     },
-    config: { scoreOrdering: 0, scoreFormat: 0, scoreUnit: "" },
+    config: { scoreFormat: 0, scoreUnit: "" },
     leaderboard: [],
     recent: [],
     arcadeVersion: null,
