@@ -1,11 +1,15 @@
 // Featured hero (SPEC §7.1 "Featured"): the single most-recently-active game,
-// presented as a large image-forward capsule — a Steam-style feature rendered
-// in the Polkadot-calm surface language (no borders; tonal surface + a soft
-// hover lift). It links to the detail "store page" exactly like a card; the Play
-// action lives there, so the whole hero is one clickable surface with no nested
-// anchors. Reuses the shared name-resolution + thumbnail logic.
+// presented as a large image-forward capsule — a Steam-style feature panel.
+// The game's signature colour (derived from its address, same family as its
+// generated key art) tints an ambient glow behind the capsule so each featured
+// game colours the shelf differently. It links to the detail "store page"
+// exactly like a card; the Play action lives there, so the whole hero is one
+// clickable surface with no nested anchors. Reuses the shared name-resolution
+// + thumbnail logic.
 
+import type { CSSProperties } from "react";
 import { bucketGameType, relativeTime } from "../logic";
+import { ambientColor } from "../placeholder";
 import { gameHref } from "../router";
 import { Thumbnail } from "./Thumbnail";
 import { useNow } from "./useNow";
@@ -17,11 +21,18 @@ export function FeaturedHero({ game }: { game: Game }) {
   const chip = bucketGameType(listing.gameType);
   const topPlayer = useTopPlayer(game);
   const now = useNow();
+  // Per-game ambient tint, consumed by the CSS glow/panel gradient.
+  const ambient = { "--ambient": ambientColor(listing.address) } as CSSProperties;
 
   return (
-    <a className="feature" href={gameHref(listing.address)}>
+    <a className="feature" href={gameHref(listing.address)} style={ambient}>
       <div className="feature__media">
-        <Thumbnail address={listing.address} cid={listing.thumbnailCid} alt={listing.name} />
+        <Thumbnail
+          address={listing.address}
+          cid={listing.thumbnailCid}
+          alt={listing.name}
+          name={listing.name}
+        />
         {listing.requiresAccount && (
           <span className="badge badge--account" title="Requires a signed-in account to play">
             account
@@ -29,10 +40,10 @@ export function FeaturedHero({ game }: { game: Game }) {
         )}
       </div>
       <div className="feature__body">
-        <div className="feature__titlerow">
-          <h3 className="feature__name" title={listing.name}>
-            {listing.name || "Untitled game"}
-          </h3>
+        <h3 className="feature__name" title={listing.name}>
+          {listing.name || "Untitled game"}
+        </h3>
+        <div className="feature__tags">
           <span className="chip">{chip}</span>
         </div>
         {listing.shortDescription && <p className="feature__desc">{listing.shortDescription}</p>}

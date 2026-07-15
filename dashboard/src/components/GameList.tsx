@@ -1,8 +1,8 @@
 // Left-hand game list (Steam Library "spine"): the browse spine for the whole
-// arcade. Text-only rows (the game image lives only in the featured hero). It
-// both SORTS (most played / recent / newest / name) and FILTERS — by gameType
-// category chips and a name search. Filter narrows the set, then sort reorders
-// it. Each row links to that game's detail page (#/game/<address>).
+// arcade. Each row leads with a micro-capsule of the game's art. It both SORTS
+// (most played / recent / newest / name) and FILTERS — by gameType category
+// chips and a name search. Filter narrows the set, then sort reorders it.
+// Each row links to that game's detail page (#/game/<address>).
 
 import { useMemo, useState } from "react";
 import {
@@ -15,6 +15,7 @@ import {
   type GameTypeChip,
 } from "../logic";
 import { gameHref } from "../router";
+import { Thumbnail } from "./Thumbnail";
 import { useNow } from "./useNow";
 import type { Game } from "../types";
 
@@ -135,6 +136,14 @@ export function GameList({ games }: { games: Game[] }) {
           {shown.map((g) => (
             <li key={g.listing.address}>
               <a className="gamelist__row" href={gameHref(g.listing.address)}>
+                <span className="gamelist__thumb" aria-hidden="true">
+                  <Thumbnail
+                    address={g.listing.address}
+                    cid={g.listing.thumbnailCid}
+                    alt=""
+                    name={g.listing.name}
+                  />
+                </span>
                 <span className="gamelist__name" title={g.listing.name}>
                   {g.listing.name || "Untitled game"}
                 </span>
